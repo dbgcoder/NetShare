@@ -1,0 +1,191 @@
+---
+description: 强制遵循“界面 QML 优先，逻辑 C++ 优先”架构，包含大数据、图片、视频等场景的性能优化，以及商用软件项目结构与命名规范
+---
+# 🏗️ 项目架构与性能优化规则
+
+## 1. 界面层（UI）—— QML 优先
+- **所有用户界面**必须使用 QML 编写，包括但不限于：窗口、控件、布局、动画、手势处理。
+- **优先使用声明式布局**（`RowLayout`、`ColumnLayout`、`GridLayout`、`Anchor` 等），避免在 QML 中使用命令式 JavaScript 计算坐标。
+- 界面中的视觉元素（颜色、字体、图标等）应当通过 QML 的属性和绑定进行配置，不得硬编码在 C++ 中。
+- 允许在 QML 中编写少量 UI 逻辑（如表单验证、视图切换），但任何涉及**业务规则、数据持久化、网络请求、复杂算法**的代码必须移至 C++。
+
+## 2. 逻辑层（Logic）—— C++ 优先
+- **所有业务逻辑、数据处理、耗时计算、硬件/系统交互**必须使用 C++ 实现。
+- 数据模型必须继承自 `QAbstractListModel` 或 `QAbstractTableModel` 等 Qt 模型类，并通过 `context property` 或 `qmlRegisterType` 暴露给 QML。
+- C++ 后端提供的功能通过以下方式与 QML 交互：
+  - **属性**（`Q_PROPERTY`）：供 QML 绑定和读取。
+  - **槽函数**（`public slots` 或 `Q_INVOKABLE`）：供 QML 调用。
+  - **信号**（`signals`）：通知 QML 状态变化。
+- **禁止**在 QML 中直接包含：
+  - 数据库查询
+  - 文件读写
+  - 网络请求
+  - 图像/视频编解码
+  - 大型循环或递归计算
+- **禁止**在 C++ 中直接创建或操作 QML 对象（除非通过 `QQmlComponent` 动态创建，但仍需保持逻辑与界面分离）。
+
+## 3. 通信规范
+- 所有跨层通信必须使用 Qt 的信号/槽机制或属性绑定，确保线程安全并保持界面响应。
+- C++ 端长时间运行的任务必须使用 `QThread` 或 `QtConcurrent` 移至后台线程，完成后通过信号返回结果。
+- 避免在 QML 中使用 `WorkerScript` 处理复杂计算——此类需求应直接由 C++ 后台线程完成。
+
+## 4. 性能优化规范（关键！）
+
+### 4.1 大数据列表 / 表格
+- **必须使用虚拟视图**：展示超过 20 条数据时，必须使用 `ListView`、`GridView` 或 `TableView`，**严禁使用 `Repeater`**。
+- **合理设置缓存**：为 `ListView` / `GridView` 指定 `cacheBuffer`（一般设为两屏高度），确保滚动平滑。
+- **代理项（delegate）极致精简**：
+  - 代理中的组件层级应尽可能浅，避免复杂的嵌套。
+  - 代理中如果有图片，必须遵守 4.2 图片优化规则。
+  - 代理中不要使用 `Loader` 动态加载组件（除非确实需要）。
+- **模型端分页**：对于超过 1000 条的数据，C++ 模型应实现分页加载，只向 QML 提供当前视图所需的数据子集。
+- **使用 `TableView` 时**：确保列数合理，避免同时渲染过多列；可通过设置 `columnWidthProvider` 和 `rowHeightProvider` 优化布局计算。
+
+### 4.2 图片加载优化
+- **异步解码**：所有 `Image` 元素必须设置 `asynchronous: true`，将图像解码移至后台线程。
+- **限制解码尺寸**：必须通过 `sourceSize` 属性指定图像的实际显示尺寸（例如 `sourceSize.width: 200, sourceSize.height: 150`），避免加载过大原图。
+- **缓存策略**：根据场景设置 `cache: true`（默认）或 `cache: false`（对于极少复用的图片可关闭缓存，但通常保持默认）。
+- **分块加载**：对超大图片（如长图、地图切片）应考虑使用 `QQuickImageProvider` 分块提供数据，或使用 `Grid` + 分块模型。
+- **避免在代理中动态加载多张图片**：如果列表项包含图片，应确保图片已缓存或使用 `asynchronous` + 占位符。
+
+### 4.3 视频播放优化
+- **使用 `MediaPlayer` 或 `VideoOutput`**：避免自行实现解码逻辑。
+- **硬件加速**：确保 Qt 多媒体后端启用了硬件加速（通常默认启用，但需检查平台配置）。
+- **解码与界面分离**：视频解码应在后台线程进行，`MediaPlayer` 内部已处理，无需额外干预。
+- **控制渲染表面**：如果全屏播放或需要高性能，考虑使用 `VideoOutput` 搭配 `QtMultimedia` 的专用渲染器。
+- **暂停不可见视频**：当视频元素不可见（`visible: false`）或不在当前页面时，应暂停播放或释放解码资源（可通过绑定 `visible` 属性控制 `playbackState`）。
+
+### 4.4 动画优化
+- **使用 Qt Quick 动画元素**：动画必须使用 `PropertyAnimation`、`NumberAnimation`、`Behavior` 等声明式动画，**禁止**在 `Timer` 中手动修改属性来实现动画。
+- **减少同时运行的动画**：避免过多动画并行，对非关键动画可适当降低帧率（`animator` 相关元素可尝试使用）。
+- **使用 `Animator` 系列**：对于简单的属性变化（如位置、缩放），优先使用 `XAnimator`、`ScaleAnimator` 等，它们直接在渲染线程执行，不占用 GUI 线程。
+
+### 4.5 懒加载与按需初始化
+- **使用 `Loader` 延迟加载**：对于非首屏可见的界面模块（如设置页、弹窗、副面板），必须使用 `Loader` 并设置 `active: false`，在需要时再加载。
+- **异步加载组件**：`Loader` 可设置 `asynchronous: true`，让组件编译在后台进行。
+- **分步初始化**：应用启动后，可通过 `Timer` 或 `Qt.callLater()` 延迟执行非关键初始化任务（如预加载后续页面数据）。
+
+### 4.6 其他通用优化
+- **减少绑定表达式复杂度**：避免在绑定中写复杂的 JavaScript 函数；若不可避免，应将函数移至 C++ 或使用条件绑定减少计算次数。
+- **使用 `Qt.callLater()` 合并频繁更新**：当属性频繁变化（如滑块拖动）时，在响应函数中使用 `Qt.callLater(updateFunction)` 将多次更新合并为一次。
+- **关闭不必要的裁剪和透明度**：`clip: true` 会带来额外开销，仅在必要时开启；避免多层半透明元素叠加。
+- **定期释放闲置资源**：在 C++ 后端实现资源管理器，对长时间未使用的图片、视频、模型数据进行释放（例如 LRU 缓存）。
+
+## 5. 项目结构与命名规范（商用软件标准）
+
+### 5.1 根目录结构
+项目根目录应遵循以下标准化布局，确保各类型文件职责清晰：
+project_root/
+├── cmake/ # CMake 模块/脚本
+├── docs/ # 项目文档
+├── resources/ # 资源文件（图片、字体、音频等）
+│ ├── images/
+│ ├── fonts/
+│ ├── qml/ # 独立的 QML 文件（若未嵌入二进制）
+│ └── translations/ # 国际化翻译文件
+├── src/ # C++ 源代码
+│ ├── core/ # 核心业务逻辑（与 UI 无关）
+│ ├── models/ # 数据模型（继承 QAbstractListModel 等）
+│ ├── backend/ # 后端服务、网络、数据库等
+│ ├── utils/ # 通用工具类
+│ └── main.cpp # 程序入口
+├── include/ # 公共头文件（如果使用传统分离结构）
+│ └── project_name/ # 以项目命名的子目录，防止头文件冲突
+├── qml/ # QML 界面文件（若未全部嵌入资源）
+│ ├── main.qml # 应用主入口
+│ ├── pages/ # 页面级组件（如 HomePage.qml, SettingsPage.qml）
+│ ├── components/ # 可复用组件（如 CustomButton.qml, NavBar.qml）
+│ ├── delegates/ # 列表/表格代理项（如 UserDelegate.qml）
+│ └── dialogs/ # 对话框（如 ConfirmDialog.qml）
+├── tests/ # 测试代码
+│ ├── unit/ # 单元测试（C++ 或 QML 测试）
+│ └── auto/ # 自动化集成测试
+├── third_party/ # 第三方依赖（或通过包管理器管理）
+├── CMakeLists.txt # 顶层 CMake 配置
+└── .gitignore
+text
+
+
+### 5.2 文件与目录命名规则
+- **C++ 头文件**：使用 `.h` 或 `.hpp` 后缀，文件名采用**大驼峰**（PascalCase），与类名一致，例如 `UserProfileManager.h`。
+- **C++ 源文件**：使用 `.cpp` 后缀，文件名与对应头文件相同，例如 `UserProfileManager.cpp`。
+- **QML 文件**：使用 `.qml` 后缀，文件名采用**大驼峰**（PascalCase），反映组件用途，例如 `MainPage.qml`、`RoundButton.qml`。
+- **目录名**：采用**小写字母**，多个单词用下划线连接（snake_case），例如 `core/`、`data_models/`。例外：`resources`、`third_party` 等约定俗成的目录可保持原样。
+- **测试文件**：单元测试文件命名为 `test_<被测文件名>.cpp`，例如 `test_user_model.cpp`。
+
+### 5.3 代码元素命名约定
+- **C++ 类**：大驼峰（PascalCase），例如 `UserAuthentication`。
+- **C++ 成员变量**：小驼峰（camelCase）并以 `m_` 开头（或使用下划线后缀），例如 `m_userName`、`m_isActive_`。
+- **C++ 函数/方法**：小驼峰（camelCase），例如 `calculateTotal()`。
+- **C++ 信号/槽**：信号以 `信号名Changed` 或描述性命名，槽函数以 `on` 开头，例如 `void onLoginButtonClicked()`。
+- **QML 属性**：小驼峰（camelCase），例如 `textColor`、`backgroundColor`。
+- **QML 信号**：描述性命名，以 `信号名` 结尾，例如 `loginSucceeded`、`itemSelected`。
+- **枚举类型**：大驼峰，枚举值采用全大写加下划线，例如 `enum class Status { OK, ERROR, PENDING };`。
+
+### 5.4 资源文件组织
+- 图片资源统一放入 `resources/images/`，并按功能模块划分子目录（如 `icons/`、`backgrounds/`）。
+- 字体文件放入 `resources/fonts/`。
+- QML 中引用资源时，优先使用 `qrc://` 路径或相对路径（`./images/icon.png`），并确保资源已正确添加到 `.qrc` 文件。
+
+### 5.5 构建系统规范
+- 使用 CMake 作为构建系统，顶层 `CMakeLists.txt` 负责添加子目录。
+- 每个模块（如 `core`、`models`）应有自己的 `CMakeLists.txt`，使用 `add_library` 或 `add_executable`。
+- 所有第三方依赖通过 `find_package` 或 `FetchContent` 管理，不应手动拷贝到源码树。
+- **AI 在终端调用 CMake（Windows）**：固定使用 Qt 自带 CMake + **MSVC** + Qt **`msvc2022_64`**；**禁止**默认 MinGW。详见 **`cmake-qt-tools.mdc`**（日常编译构建目录与 Qt Creator 共用 **`D:\FXduan\AiModelDemo\build`**，与 **`Build-pack\aimodel-pack`** 打包构建区分）。
+
+### 5.6 注释与文档
+- 公共 API 必须使用 Doxygen 风格注释（`/** ... */`），描述函数用途、参数和返回值。
+- 复杂算法或业务逻辑需添加行内注释。
+- QML 组件应添加简要说明，描述其用法和可定制的属性。
+
+### 5.7 AI 生成约束
+- 当 AI 创建新文件时，必须根据其用途（如新类、新 QML 组件）放置在正确的目录中，并遵循上述命名规范。
+- 如果用户要求生成“一个用户管理界面”，AI 应自动规划：
+  - C++ 模型：`src/models/UserModel.cpp` 和 `include/project_name/models/UserModel.h`
+  - QML 视图：`qml/pages/UserManagementPage.qml`
+  - 可复用组件：`qml/components/UserAvatar.qml`（如果存在）
+- AI 不得随意在根目录创建文件，也不得使用不合规的命名（如 `aaa.cpp`、`新建文件.qml`）。
+
+## 6. 代码审查要点
+- **检查点 A**：任何新 QML 文件是否包含了业务逻辑代码？
+  - 如果发现 QML 中有超过 5 行的 JavaScript 函数且涉及数据处理，应警告并迁移至 C++。
+- **检查点 B**：任何新 C++ 类是否直接构建了 UI 元素或设置了控件样式？
+  - 如果发现 C++ 代码中出现了 `QQuickView`、`QQuickItem` 的显式创建或属性设置（除非是动态加载组件），应警告并移至 QML。
+- **检查点 C**：是否在列表代理中使用了可能导致卡顿的组件？
+  - 检查代理层级、图片加载方式、是否使用了 `Loader` 等，不符合 4.1、4.2 条的要求应修正。
+- **检查点 D**：是否所有 `Image` 都设置了 `asynchronous` 和 `sourceSize`？
+  - 如果发现未设置，自动补充并提醒开发者。
+- **检查点 E**：是否对长时间运行的 C++ 任务进行了线程处理？
+  - 如果 C++ 槽函数中有超过 10ms 的操作，必须移到后台线程，否则给出警告。
+- **检查点 F**：新创建的文件是否放置在正确目录？命名是否符合规范？
+- **检查点 G**：C++ 头文件是否使用了 `#pragma once` 或标准包含守卫？
+- **检查点 H**：QML 组件是否位于 `qml/components/` 而非散落在各处？
+- **检查点 I**：CMakeLists.txt 是否更新以包含新源文件？
+
+## 7. 示例期望
+**正确做法**：
+- `main.cpp`：仅负责设置上下文属性并加载主 QML 文件。
+- `UserModel.cpp`：继承 `QAbstractListModel`，提供分页加载接口，通过信号通知 QML 数据变化。
+- `UserListView.qml`：使用 `ListView`，代理极简，图片按规范加载。
+- `VideoPlayer.qml`：使用 `MediaPlayer` + `VideoOutput`，通过 C++ 后端管理播放列表。
+- 目录结构严格遵循 5.1 规范。
+
+**错误做法**：
+- 在 QML 中用 `Repeater` 显示 1000 条数据（❌）。
+- 图片加载未设 `sourceSize`，导致内存爆炸（❌）。
+- 在 C++ 槽函数中执行耗时数据库查询（❌）。
+- 将 QML 文件随意放在根目录下（❌）。
+- 创建名为 `myclass.cpp` 的源文件（❌，应为 `MyClass.cpp`）。
+
+---
+
+## 8. 合规检查与验证
+
+- **执行合规检查**：运行 `scripts/check-architecture-compliance.ps1` 可快速检查 QML 中数据库/网络违规、Image 缺 sourceSize、Repeater 使用等。
+- **详细修正计划**：完整分步修正计划见 `docs/architecture-compliance-correction-plan.md`，每步均含验证方法。
+- **修正后验证**：每次修正完成后，重新运行上述脚本，确认高优先级违规（数据库/网络）为 0，并逐项勾选修正计划中的验证清单。
+
+---
+
+## ⚠️ 强制机制
+AI 在生成代码时必须严格遵守上述所有规则。若用户请求涉及界面实现，自动采用 QML 生成；若涉及数据处理或复杂功能，自动采用 C++ 生成。任何违反规则（包括性能优化、目录结构、命名规范）的建议将被自动修正并提示用户。

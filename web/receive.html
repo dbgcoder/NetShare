@@ -1,0 +1,862 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NetShare - 发送文件</title>
+    <style>
+        :root {
+            --bg-primary: #0f0f23;
+            --bg-card: #16213e;
+            --bg-hover: #1a1a2e;
+            --accent: #4caf50;
+            --accent-hover: #66bb6a;
+            --text-primary: #eee;
+            --text-secondary: #888;
+            --text-muted: #555;
+            --border: #2a2a3e;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .container { max-width: 540px; width: 100%; }
+        .card {
+            background: var(--bg-card);
+            border-radius: 16px;
+            padding: 40px;
+        }
+        h1 { text-align: center; font-size: 24px; margin-bottom: 8px; }
+        .subtitle { text-align: center; color: var(--text-secondary); margin-bottom: 30px; font-size: 14px; }
+
+        .upload-area {
+            border: 2px dashed var(--border);
+            border-radius: 12px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-bottom: 20px;
+        }
+        .upload-area:hover, .upload-area.dragover {
+            border-color: var(--accent);
+            background: rgba(76, 175, 80, 0.05);
+        }
+        .upload-icon { font-size: 48px; margin-bottom: 12px; }
+        .upload-text { color: var(--text-secondary); font-size: 14px; }
+        .upload-text span { color: var(--accent); font-weight: 600; }
+
+        .file-input { display: none; }
+
+        .btn-group {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+        .btn-group label {
+            flex: 1;
+            padding: 10px;
+            background: var(--bg-hover);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+            display: block;
+        }
+        .btn-select-file { color: var(--accent); }
+        .btn-select-file:hover { background: rgba(76, 175, 80, 0.1); }
+        .btn-select-folder { color: #2196f3; }
+        .btn-select-folder:hover { background: rgba(33, 150, 243, 0.1); }
+
+        .file-list { margin-bottom: 20px; max-height: 240px; overflow-y: auto; }
+        .file-item {
+            display: flex;
+            align-items: center;
+            padding: 10px 14px;
+            background: var(--bg-primary);
+            border-radius: 8px;
+            margin-bottom: 8px;
+        }
+        .file-item-icon {
+            width: 32px; height: 32px;
+            background: var(--accent);
+            border-radius: 6px;
+            display: flex; justify-content: center; align-items: center;
+            margin-right: 12px;
+            font-size: 16px;
+            flex-shrink: 0;
+        }
+        .file-item-info { flex: 1; min-width: 0; }
+        .file-item-name {
+            font-size: 14px; color: var(--text-primary);
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .file-item-size { font-size: 12px; color: var(--text-secondary); }
+        .file-item-progress {
+            height: 3px; background: var(--border);
+            border-radius: 2px; overflow: hidden; margin-top: 4px;
+        }
+        .file-item-progress-fill {
+            height: 100%; background: var(--accent);
+            width: 0%; transition: width 0.2s;
+        }
+        .file-item-status { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+        .file-item-remove {
+            width: 24px; height: 24px;
+            border: none; background: #e94560; color: #fff;
+            border-radius: 50%; cursor: pointer; font-size: 14px;
+            display: flex; justify-content: center; align-items: center;
+            flex-shrink: 0;
+        }
+        .file-summary {
+            text-align: right;
+            padding: 4px 14px;
+            color: var(--text-secondary);
+            font-size: 12px;
+        }
+
+        .progress-wrap { margin-bottom: 20px; display: none; }
+        .progress-wrap.active { display: block; }
+        .progress-bar {
+            height: 6px; background: var(--border);
+            border-radius: 3px; overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%; background: var(--accent);
+            width: 0%; transition: width 0.3s;
+        }
+        .progress-info {
+            display: flex; justify-content: space-between;
+            margin-top: 8px; font-size: 12px; color: var(--text-secondary);
+        }
+
+        .btn {
+            width: 100%;
+            padding: 14px;
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s, transform 0.1s;
+        }
+        .btn:hover { background: var(--accent-hover); transform: translateY(-1px); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+        .result {
+            text-align: center;
+            padding: 20px;
+            display: none;
+        }
+        .result.active { display: block; }
+        .result-icon { font-size: 48px; margin-bottom: 12px; }
+        .result-text { color: var(--text-secondary); font-size: 14px; margin-bottom: 16px; }
+
+        .footer { text-align: center; color: var(--text-muted); font-size: 12px; margin-top: 24px; }
+
+        .resume-hint {
+            background: rgba(33, 150, 243, 0.1);
+            border: 1px solid rgba(33, 150, 243, 0.3);
+            border-radius: 8px;
+            padding: 10px 14px;
+            margin-bottom: 16px;
+            font-size: 13px;
+            color: #64b5f6;
+            display: none;
+        }
+        .resume-hint.active { display: block; }
+
+        .btn-retry {
+            width: 100%;
+            padding: 12px;
+            background: #e94560;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 8px;
+            display: none;
+        }
+        .btn-retry.active { display: block; }
+        .btn-retry:hover { background: #ff6b81; }
+
+        .ws-status {
+            display: flex; align-items: center; justify-content: center;
+            gap: 6px; font-size: 11px; color: var(--text-muted); margin-top: 8px;
+        }
+        .ws-dot {
+            width: 8px; height: 8px; border-radius: 50%;
+            background: #e94560; transition: background 0.3s;
+        }
+        .ws-dot.connected { background: #4caf50; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card" id="uploadCard">
+            <h1>📤 发送文件</h1>
+            <p class="subtitle">选择文件发送到对方设备</p>
+
+            <div class="upload-area" id="uploadArea">
+                <div class="upload-icon">📁</div>
+                <p class="upload-text">将文件或文件夹拖拽到此处</p>
+            </div>
+
+            <input type="file" id="fileInput" class="file-input" multiple>
+            <input type="file" id="folderInput" class="file-input" multiple webkitdirectory directory mozdirectory>
+
+            <div class="btn-group">
+                <label for="fileInput" class="btn-select-file">📄 选择文件</label>
+                <label for="folderInput" class="btn-select-folder">📁 选择文件夹</label>
+            </div>
+
+            <div class="file-list" id="fileList"></div>
+
+            <div class="progress-wrap" id="progressWrap">
+                <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+                <div class="progress-info">
+                    <span id="progressText">0%</span>
+                    <span id="statusText">发送中...</span>
+                </div>
+            </div>
+
+            <div class="resume-hint" id="resumeHint"></div>
+
+            <button class="btn" id="uploadBtn" disabled>
+                开始发送
+            </button>
+
+            <button class="btn-retry" id="retryBtn">
+                重试失败文件
+            </button>
+
+            <div class="result" id="resultSection">
+                <div class="result-icon">✅</div>
+                <div class="result-text" id="resultText">文件发送成功！</div>
+            </div>
+        </div>
+        <p class="footer">由 NetShare 提供 <span class="ws-status" id="wsStatus"><span class="ws-dot" id="wsDot"></span><span id="wsText"></span></span></p>
+    </div>
+
+<script>
+// ===== Global error handler =====
+window.onerror = function(msg, url, line, col, err) {
+    alert('JS错误: ' + msg + ' (行' + line + ')');
+};
+window.addEventListener('unhandledrejection', function(e) {
+    alert('Promise错误: ' + (e.reason && e.reason.message ? e.reason.message : e.reason));
+});
+
+// ===== State =====
+var selectedFiles = []; // { file: File, relativePath: string }
+var uploadStatus = {};
+var uploadedSize = 0;
+var totalUploadSize = 0;
+var failedFiles = [];
+var uploadSessionId = '';
+var chunkInfo = {};
+var xhrProgressActive = false;
+var ws = null;
+var wsConnected = false;
+var MAX_CONCURRENT = 3;
+
+// ===== DOM refs =====
+var uploadArea = document.getElementById('uploadArea');
+var fileInput = document.getElementById('fileInput');
+var folderInput = document.getElementById('folderInput');
+var fileListEl = document.getElementById('fileList');
+var uploadBtn = document.getElementById('uploadBtn');
+var retryBtn = document.getElementById('retryBtn');
+var resumeHint = document.getElementById('resumeHint');
+
+// ===== WebSocket =====
+function connectWebSocket() {
+    if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+        if (ws.readyState === WebSocket.OPEN && uploadSessionId) {
+            ws.send(JSON.stringify({ type: 'subscribe', data: { token: uploadSessionId } }));
+        }
+        return;
+    }
+    var wsPort = location.port ? parseInt(location.port) + 1 : 8081;
+    var wsUrl = 'ws://' + location.hostname + ':' + wsPort;
+    try { ws = new WebSocket(wsUrl); } catch (e) { return; }
+
+    ws.onopen = function() {
+        wsConnected = true;
+        updateWsStatus(true);
+        if (uploadSessionId) {
+            ws.send(JSON.stringify({ type: 'subscribe', data: { token: uploadSessionId } }));
+        }
+    };
+    ws.onmessage = function(e) {
+        try {
+            var msg = JSON.parse(e.data);
+            if (msg.type === 'transfer_update' && msg.data && msg.data.progress !== undefined && !xhrProgressActive) {
+                var fill = document.getElementById('progressFill');
+                if (fill) fill.style.width = msg.data.progress + '%';
+                var pct = document.getElementById('progressText');
+                if (pct) pct.textContent = msg.data.progress + '%';
+                if (msg.data.speed) {
+                    var st = document.getElementById('statusText');
+                    if (st) st.textContent = '发送中... ' + formatSize(msg.data.speed) + '/s';
+                }
+            }
+        } catch (ex) {}
+    };
+    ws.onclose = function() {
+        wsConnected = false;
+        updateWsStatus(false);
+        var hasActive = Object.values(uploadStatus).some(function(s) { return s === 'uploading' || s === 'pending'; });
+        if (hasActive) setTimeout(connectWebSocket, 5000);
+    };
+    ws.onerror = function() {};
+}
+
+function updateWsStatus(connected) {
+    var dot = document.getElementById('wsDot');
+    var text = document.getElementById('wsText');
+    if (dot) dot.className = 'ws-dot' + (connected ? ' connected' : '');
+    if (text) text.textContent = connected ? '实时连接' : '';
+}
+
+// ===== Drag & Drop =====
+uploadArea.addEventListener('click', function() { fileInput.click(); });
+uploadArea.addEventListener('dragover', function(e) { e.preventDefault(); uploadArea.classList.add('dragover'); });
+uploadArea.addEventListener('dragleave', function() { uploadArea.classList.remove('dragover'); });
+uploadArea.addEventListener('drop', async function(e) {
+    e.preventDefault();
+    uploadArea.classList.remove('dragover');
+    var items = e.dataTransfer.items;
+    if (items && items.length > 0) {
+        var entries = [];
+        for (var i = 0; i < items.length; i++) {
+            var entry = items[i].webkitGetAsEntry ? items[i].webkitGetAsEntry() : null;
+            if (entry) entries.push(entry);
+        }
+        if (entries.length > 0) {
+            var files = await traverseEntries(entries, '');
+            files.forEach(function(f) { selectedFiles.push(f); });
+            renderFileList();
+            uploadBtn.disabled = selectedFiles.length === 0;
+            return;
+        }
+    }
+    handleFiles(e.dataTransfer.files);
+});
+
+// ===== File input =====
+fileInput.addEventListener('change', function() {
+    var files = Array.from(fileInput.files);
+    files.forEach(function(f) { selectedFiles.push({ file: f, relativePath: f.name }); });
+    renderFileList();
+    uploadBtn.disabled = selectedFiles.length === 0;
+    fileInput.value = '';
+});
+
+folderInput.addEventListener('change', function() {
+    var files = Array.from(folderInput.files);
+    files.forEach(function(f) {
+        var relPath = f.webkitRelativePath || f.name;
+        selectedFiles.push({ file: f, relativePath: relPath });
+    });
+    renderFileList();
+    uploadBtn.disabled = selectedFiles.length === 0;
+    folderInput.value = '';
+});
+
+function handleFiles(files) {
+    for (var i = 0; i < files.length; i++) {
+        selectedFiles.push({ file: files[i], relativePath: files[i].name });
+    }
+    renderFileList();
+    uploadBtn.disabled = selectedFiles.length === 0;
+}
+
+// ===== Traverse directory entries =====
+function traverseEntries(entries, basePath) {
+    return new Promise(function(resolve) {
+        var results = [];
+        var pending = entries.length;
+        if (pending === 0) { resolve(results); return; }
+        for (var i = 0; i < entries.length; i++) {
+            (function(entry) {
+                if (entry.isFile) {
+                    entry.file(function(f) {
+                        var relativePath = basePath ? basePath + '/' + f.name : f.name;
+                        results.push({ file: f, relativePath: relativePath });
+                        if (--pending === 0) resolve(results);
+                    }, function() { if (--pending === 0) resolve(results); });
+                } else if (entry.isDirectory) {
+                    readAllDirectoryEntries(entry, basePath).then(function(subResults) {
+                        results = results.concat(subResults);
+                        if (--pending === 0) resolve(results);
+                    });
+                } else {
+                    if (--pending === 0) resolve(results);
+                }
+            })(entries[i]);
+        }
+    });
+}
+
+function readAllDirectoryEntries(dirEntry, parentPath) {
+    var dirPath = parentPath ? parentPath + '/' + dirEntry.name : dirEntry.name;
+    var reader = dirEntry.createReader();
+    return new Promise(function(resolve) {
+        var allEntries = [];
+        function readBatch() {
+            reader.readEntries(function(batch) {
+                if (batch.length === 0) {
+                    if (allEntries.length === 0) { resolve([]); return; }
+                    traverseEntries(allEntries, dirPath).then(resolve);
+                } else {
+                    allEntries = allEntries.concat(batch);
+                    readBatch();
+                }
+            }, function() { resolve([]); });
+        }
+        readBatch();
+    });
+}
+
+// ===== Render file list =====
+function renderFileList() {
+    fileListEl.innerHTML = '';
+    var totalSize = 0;
+    selectedFiles.forEach(function(item, i) {
+        totalSize += item.file.size;
+        var div = document.createElement('div');
+        div.className = 'file-item';
+        div.id = 'file-item-' + i;
+        div.innerHTML =
+            '<div class="file-item-icon">📄</div>' +
+            '<div class="file-item-info">' +
+                '<div class="file-item-name" title="' + escapeAttr(item.relativePath) + '">' + escapeHtml(item.relativePath) + '</div>' +
+                '<div class="file-item-size">' + formatSize(item.file.size) + '</div>' +
+                '<div class="file-item-progress"><div class="file-item-progress-fill" id="file-progress-' + i + '"></div></div>' +
+                '<div class="file-item-status" id="file-status-' + i + '"></div>' +
+            '</div>' +
+            '<button class="file-item-remove" data-index="' + i + '">×</button>';
+        fileListEl.appendChild(div);
+    });
+    if (selectedFiles.length > 0) {
+        var summary = document.createElement('div');
+        summary.className = 'file-summary';
+        summary.textContent = '共 ' + selectedFiles.length + ' 个文件，总大小 ' + formatSize(totalSize);
+        fileListEl.appendChild(summary);
+    }
+}
+
+// Use event delegation for remove buttons
+fileListEl.addEventListener('click', function(e) {
+    var btn = e.target.closest('.file-item-remove');
+    if (btn) {
+        var idx = parseInt(btn.getAttribute('data-index'));
+        if (!isNaN(idx)) {
+            selectedFiles.splice(idx, 1);
+            renderFileList();
+            uploadBtn.disabled = selectedFiles.length === 0;
+        }
+    }
+});
+
+// ===== Utility =====
+function formatSize(b) {
+    if (b < 1024) return b + ' B';
+    if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
+    if (b < 1073741824) return (b / 1048576).toFixed(1) + ' MB';
+    return (b / 1073741824).toFixed(1) + ' GB';
+}
+
+function escapeHtml(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function escapeAttr(s) {
+    return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// ===== Upload logic =====
+uploadBtn.addEventListener('click', startUpload);
+retryBtn.addEventListener('click', retryFailed);
+
+async function startUpload() {
+    if (selectedFiles.length === 0) return;
+
+    totalUploadSize = 0;
+    selectedFiles.forEach(function(item) { totalUploadSize += item.file.size; });
+    uploadedSize = 0;
+    failedFiles = [];
+    uploadStatus = {};
+    chunkInfo = {};
+    xhrProgressActive = false;
+    uploadSessionId = '';
+    selectedFiles.forEach(function(item) { uploadStatus[item.relativePath] = 'pending'; });
+
+    document.getElementById('progressWrap').classList.add('active');
+    uploadBtn.disabled = true;
+    retryBtn.classList.remove('active');
+    resumeHint.classList.remove('active');
+    updateProgress(0, selectedFiles.length, 0, totalUploadSize);
+
+    var filesToUpload = selectedFiles.slice();
+    try {
+        var checkBody = JSON.stringify({
+            files: selectedFiles.map(function(item) { return { path: item.relativePath, size: item.file.size }; })
+        });
+        var checkResp = await fetch('/api/upload/check', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: checkBody
+        });
+        if (checkResp.ok) {
+            var checkData = await checkResp.json();
+            if (checkData.sessionId) {
+                uploadSessionId = checkData.sessionId;
+                connectWebSocket();
+            }
+            var skipCount = 0;
+            var resumeCount = 0;
+            if (checkData.existing && checkData.existing.length > 0) {
+                var existingPaths = new Set(checkData.existing.map(function(f) { return f.path; }));
+                var skippedSize = selectedFiles
+                    .filter(function(item) { return existingPaths.has(item.relativePath); })
+                    .reduce(function(sum, item) { return sum + item.file.size; }, 0);
+                existingPaths.forEach(function(path) { uploadStatus[path] = 'done'; });
+                uploadedSize += skippedSize;
+                filesToUpload = selectedFiles.filter(function(item) { return !existingPaths.has(item.relativePath); });
+                skipCount = existingPaths.size;
+            }
+            if (checkData.partial && checkData.partial.length > 0) {
+                checkData.partial.forEach(function(f) {
+                    if (f.useChunking !== false && f.chunkSize && f.chunkCount) {
+                        chunkInfo[f.path] = {
+                            chunkSize: f.chunkSize,
+                            chunkCount: f.chunkCount,
+                            completedChunks: new Set(f.completedChunks || []),
+                            useChunking: true
+                        };
+                        uploadedSize += (f.completedBytes !== undefined ? f.completedBytes : (f.completedChunks || []).length * f.chunkSize);
+                    } else {
+                        chunkInfo[f.path] = { resumeOffset: f.size, useChunking: false };
+                        uploadedSize += f.size;
+                    }
+                });
+                resumeCount = checkData.partial.length;
+            }
+            if (skipCount > 0 || resumeCount > 0) {
+                var hint = '检测到未完成的上传，';
+                var parts = [];
+                if (skipCount > 0) parts.push('跳过' + skipCount + '个已完成文件');
+                if (resumeCount > 0) parts.push('续传' + resumeCount + '个部分文件');
+                resumeHint.textContent = hint + parts.join('，');
+                resumeHint.classList.add('active');
+            }
+        } else {
+            alert('检查接口返回错误: HTTP ' + checkResp.status);
+        }
+    } catch (ex) {
+        alert('检查上传状态失败: ' + (ex.message || ex));
+    }
+
+    try {
+        await uploadConcurrent(filesToUpload);
+    } catch (ex) {
+        alert('上传过程出错: ' + (ex.message || ex));
+    }
+
+    var failCount = Object.values(uploadStatus).filter(function(s) { return s === 'failed'; }).length;
+    var doneCount = Object.values(uploadStatus).filter(function(s) { return s === 'done'; }).length;
+    if (failCount > 0) {
+        document.getElementById('statusText').textContent = failCount + ' 个文件发送失败';
+        retryBtn.classList.add('active');
+    } else if (doneCount === selectedFiles.length) {
+        await finalize();
+    }
+}
+
+async function uploadConcurrent(fileList) {
+    if (!fileList.length) return;
+    var idx = 0;
+    var total = selectedFiles.length;
+
+    async function next() {
+        while (idx < fileList.length) {
+            var item = fileList[idx++];
+            uploadStatus[item.relativePath] = 'uploading';
+            updateFileStatus(item.relativePath, '发送中...');
+            try {
+                await uploadOne(item);
+                uploadStatus[item.relativePath] = 'done';
+                updateFileStatus(item.relativePath, '已完成');
+            } catch (e) {
+                uploadStatus[item.relativePath] = 'failed';
+                failedFiles.push(item);
+                updateFileStatus(item.relativePath, '失败: ' + (e.message || e));
+            }
+            var doneCount = Object.values(uploadStatus).filter(function(s) { return s === 'done'; }).length;
+            updateProgress(doneCount, total, uploadedSize, totalUploadSize);
+        }
+    }
+
+    var workers = [];
+    var cc = Math.min(MAX_CONCURRENT, fileList.length);
+    for (var i = 0; i < cc; i++) workers.push(next());
+    await Promise.all(workers);
+}
+
+function uploadOne(item) {
+    var info = chunkInfo[item.relativePath];
+    if (info && info.useChunking) return uploadChunked(item, info);
+    return uploadSmall(item, info);
+}
+
+function uploadChunked(item, info) {
+    var fileSize = item.file.size;
+    var chunkSize = info.chunkSize;
+    var totalChunks = Math.ceil(fileSize / chunkSize);
+    var pending = [];
+    for (var i = 0; i < totalChunks; i++) {
+        if (!info.completedChunks.has(i)) pending.push(i);
+    }
+    if (pending.length === 0) return Promise.resolve();
+
+    var nextCI = 0;
+    var failedChunks = [];
+
+    function uploadNextChunk() {
+        return new Promise(function(resolveAll) {
+            var promises = [];
+            var cc = Math.min(MAX_CONCURRENT, pending.length);
+            for (var w = 0; w < cc; w++) {
+                promises.push(new Promise(function(resolveW) {
+                    function doNext() {
+                        if (nextCI >= pending.length) { resolveW(); return; }
+                        var ci = pending[nextCI++];
+                        var start = ci * chunkSize;
+                        var end = Math.min(start + chunkSize, fileSize);
+                        var blob = item.file.slice(start, end);
+                        var xhr = new XMLHttpRequest();
+                        xhr.open('POST', '/api/upload/file', true);
+                        xhr.setRequestHeader('X-Upload-Session', uploadSessionId);
+                        xhr.setRequestHeader('X-File-Path', encodeURIComponent(item.relativePath));
+                        xhr.setRequestHeader('X-Chunk-Index', ci.toString());
+                        xhr.upload.onprogress = function(e) {
+                            if (e.lengthComputable) {
+                                xhrProgressActive = true;
+                                var cb = uploadedSize + e.loaded;
+                                var pct = Math.min(100, Math.round(cb / totalUploadSize * 100));
+                                var fill = document.getElementById('progressFill');
+                                if (fill) fill.style.width = pct + '%';
+                                var st = document.getElementById('statusText');
+                                if (st) st.textContent = formatSize(cb) + ' / ' + formatSize(totalUploadSize);
+                            }
+                        };
+                        xhr.onload = function() {
+                            xhrProgressActive = false;
+                            if (xhr.status === 200) {
+                                info.completedChunks.add(ci);
+                                uploadedSize += blob.size;
+                                doNext();
+                            } else {
+                                failedChunks.push(ci);
+                                doNext();
+                            }
+                        };
+                        xhr.onerror = function() { xhrProgressActive = false; failedChunks.push(ci); doNext(); };
+                        xhr.timeout = 0;
+                        xhr.send(blob);
+                    }
+                    doNext();
+                }));
+            }
+            Promise.all(promises).then(resolveAll);
+        });
+    }
+
+    return uploadNextChunk().then(function() {
+        // Retry failed chunks up to 3 times
+        var maxRetries = 3;
+        function retryFailed() {
+            if (failedChunks.length === 0 || maxRetries <= 0) {
+                if (failedChunks.length > 0) {
+                    throw new Error(failedChunks.length + ' chunks failed to upload');
+                }
+                return;
+            }
+            var retryList = failedChunks.slice();
+            failedChunks = [];
+            maxRetries--;
+            nextCI = 0;
+            pending = retryList;
+            return uploadNextChunk().then(retryFailed);
+        }
+        return retryFailed();
+    });
+}
+
+function uploadSmall(item, info) {
+    return new Promise(function(resolve, reject) {
+        var offset = (info && info.resumeOffset) ? info.resumeOffset : 0;
+        var blob = offset > 0 ? item.file.slice(offset) : item.file;
+        var fd = new FormData();
+        fd.append('file', blob, item.relativePath);
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', '/api/upload/file', true);
+        if (uploadSessionId) xhr.setRequestHeader('X-Upload-Session', uploadSessionId);
+        xhr.setRequestHeader('X-File-Path', encodeURIComponent(item.relativePath));
+        xhr.upload.onprogress = function(e) {
+            if (e.lengthComputable) {
+                xhrProgressActive = true;
+                var totalLoaded = offset + e.loaded;
+                var pct = Math.round(totalLoaded / item.file.size * 100);
+                var fill = document.getElementById('progressFill');
+                var st = document.getElementById('statusText');
+                if (fill) fill.style.width = pct + '%';
+                if (st) st.textContent = formatSize(totalLoaded) + ' / ' + formatSize(item.file.size);
+            }
+        };
+        xhr.timeout = 0;
+        xhr.onload = function() {
+            xhrProgressActive = false;
+            if (xhr.status === 200) {
+                uploadedSize += item.file.size - offset;
+                resolve();
+            } else {
+                reject(new Error('HTTP ' + xhr.status + ': ' + xhr.responseText.substring(0, 200)));
+            }
+        };
+        xhr.onerror = function() { xhrProgressActive = false; reject(new Error('网络错误: ' + item.relativePath)); };
+        xhr.ontimeout = function() { xhrProgressActive = false; reject(new Error('超时: ' + item.relativePath)); };
+        xhr.send(fd);
+    });
+}
+
+function updateProgress(done, total, doneSz, totalSz) {
+    var pct = totalSz > 0 ? Math.round(doneSz / totalSz * 100) : (total > 0 ? Math.round(done / total * 100) : 0);
+    var fill = document.getElementById('progressFill');
+    if (fill) fill.style.width = pct + '%';
+    var pctEl = document.getElementById('progressText');
+    if (pctEl) pctEl.textContent = pct + '% (' + done + '/' + total + ')';
+    var st = document.getElementById('statusText');
+    if (st) st.textContent = '发送中... ' + formatSize(doneSz) + ' / ' + formatSize(totalSz);
+}
+
+function updateFileStatus(relativePath, statusText) {
+    for (var i = 0; i < selectedFiles.length; i++) {
+        if (selectedFiles[i].relativePath === relativePath) {
+            var el = document.getElementById('file-status-' + i);
+            if (el) el.textContent = statusText;
+            break;
+        }
+    }
+}
+
+async function retryFailed() {
+    if (!failedFiles.length) return;
+    retryBtn.classList.remove('active');
+    var retry = failedFiles.slice();
+    failedFiles = [];
+    chunkInfo = {};
+    xhrProgressActive = false;
+
+    try {
+        var cr = await fetch('/api/upload/check', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                files: retry.map(function(x) { return { path: x.relativePath, size: x.file.size }; })
+            })
+        });
+        if (cr.ok) {
+            var cd = await cr.json();
+            if (cd.sessionId) { uploadSessionId = cd.sessionId; connectWebSocket(); }
+            if (cd.existing && cd.existing.length > 0) {
+                var ep = new Set(cd.existing.map(function(f) { return f.path; }));
+                retry = retry.filter(function(x) { return !ep.has(x.relativePath); });
+                ep.forEach(function(p) { uploadStatus[p] = 'done'; });
+            }
+            if (cd.partial && cd.partial.length > 0) {
+                cd.partial.forEach(function(f) {
+                    if (f.useChunking !== false && f.chunkSize && f.chunkCount) {
+                        chunkInfo[f.path] = {
+                            chunkSize: f.chunkSize,
+                            chunkCount: f.chunkCount,
+                            completedChunks: new Set(f.completedChunks || []),
+                            useChunking: true
+                        };
+                    } else {
+                        chunkInfo[f.path] = { resumeOffset: f.size, useChunking: false };
+                    }
+                });
+            }
+        }
+    } catch (ex) {
+        alert('重试检查失败: ' + (ex.message || ex));
+    }
+
+    retry.forEach(function(x) { uploadStatus[x.relativePath] = 'pending'; });
+    await uploadConcurrent(retry);
+
+    var failCount = Object.values(uploadStatus).filter(function(s) { return s === 'failed'; }).length;
+    var doneCount = Object.values(uploadStatus).filter(function(s) { return s === 'done'; }).length;
+    if (failCount > 0) {
+        document.getElementById('statusText').textContent = failCount + ' 个文件发送失败';
+        retryBtn.classList.add('active');
+    } else if (doneCount === selectedFiles.length) {
+        await finalize();
+    }
+}
+
+async function finalize() {
+    document.getElementById('statusText').textContent = '正在完成...';
+    var firstPath = selectedFiles[0].relativePath;
+    var isFolder = firstPath.indexOf('/') >= 0;
+    var folderRoot = isFolder ? firstPath.split('/')[0] : '';
+
+    try {
+        var resp = await fetch('/api/upload/finalize', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                folder: folderRoot,
+                isFolder: isFolder,
+                totalSize: totalUploadSize,
+                fileCount: selectedFiles.length,
+                token: '',
+                isReceive: true,
+                sessionId: uploadSessionId
+            })
+        });
+        if (resp.ok) {
+            var d = await resp.json();
+            uploadBtn.style.display = 'none';
+            document.getElementById('progressWrap').classList.remove('active');
+            retryBtn.classList.remove('active');
+            document.getElementById('resultText').textContent = '成功发送 ' + d.count + ' 个文件！';
+            document.getElementById('resultSection').classList.add('active');
+        } else {
+            document.getElementById('statusText').textContent = '完成操作失败';
+            uploadBtn.disabled = false;
+        }
+    } catch (e) {
+        document.getElementById('statusText').textContent = '完成操作失败';
+        uploadBtn.disabled = false;
+    }
+}
+</script>
+</body>
+</html>
