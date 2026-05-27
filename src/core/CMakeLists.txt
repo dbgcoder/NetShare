@@ -1,6 +1,7 @@
 set(NETSHARE_CORE_SOURCES
     common/Logger.cpp
     common/SettingsManager.cpp
+    common/TlsCertificateGenerator.cpp
 )
 
 set(NETSHARE_CORE_HEADERS
@@ -8,9 +9,10 @@ set(NETSHARE_CORE_HEADERS
     common/IFileBrowser.h
     common/IFolderPacker.h
     common/NetShareError.h
-    common/ServiceLocator.h
+    common/DiContainer.h
     common/Logger.h
     common/SettingsManager.h
+    common/TlsCertificateGenerator.h
 )
 
 set(NETSHARE_CORE_SHARE_SOURCES
@@ -74,6 +76,7 @@ target_include_directories(NetshareCore PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/notification
     ${CMAKE_CURRENT_SOURCE_DIR}/../database
     ${CMAKE_BINARY_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/boost-di
 )
 
 target_link_libraries(NetshareCore PUBLIC

@@ -1,23 +1,13 @@
 #include "test_integration.h"
-#include "network/HttpServer.h"
+#include "network/CivetWebServer.h"
 #include "network/RequestHandler.h"
 #include "core/share/ShareManager.h"
-#include "core/transfer/TransferLogService.h"
 #include "core/common/Logger.h"
-#include <QTcpSocket>
 #include <QStandardPaths>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QEventLoop>
-#include <QTimer>
 
-TestIntegration::TestIntegration()
-    : m_server(nullptr)
-    , m_shareManager(nullptr)
-    , m_port(0)
-{
-}
-
+TestIntegration::TestIntegration() = default;
 TestIntegration::~TestIntegration() = default;
 
 void TestIntegration::initTestCase()
@@ -25,12 +15,12 @@ void TestIntegration::initTestCase()
     Logger::initialize(QStandardPaths::writableLocation(QStandardPaths::TempLocation) + "/netshare_test_int/logs");
 
     m_shareManager = &ShareManager::instance();
-    m_port = 18080; // Use non-standard port for testing
+    m_port = 18080;
 
-    m_server = new HttpServer(this);
-    auto* requestHandler = new RequestHandler(m_shareManager, nullptr, nullptr, this);
-    requestHandler->setUploadDir(QStandardPaths::writableLocation(QStandardPaths::TempLocation) + "/netshare_test_int/uploads");
-    requestHandler->registerRoutes(m_server);
+    m_server = new CivetWebServer(this);
+    m_requestHandler = new RequestHandler(m_shareManager, nullptr, nullptr, this);
+    m_requestHandler->setUploadDir(QStandardPaths::writableLocation(QStandardPaths::TempLocation) + "/netshare_test_int/uploads");
+    m_requestHandler->registerRoutes(m_server);
 
     QVERIFY(m_server->start(m_port, "127.0.0.1"));
 }
@@ -39,7 +29,6 @@ void TestIntegration::cleanupTestCase()
 {
     if (m_server) {
         m_server->stop();
-        delete m_server;
     }
     Logger::shutdown();
 }
@@ -60,17 +49,10 @@ QByteArray TestIntegration::httpGet(const QString& path)
     QObject::connect(&socket, &QTcpSocket::readyRead, &socket, [&]() {
         response.append(socket.readAll());
     });
-    // Also collect any data available right now
-    if (socket.bytesAvailable() > 0) {
-        response.append(socket.readAll());
-    }
-    // Wait for disconnect with timeout
+    if (socket.bytesAvailable() > 0) response.append(socket.readAll());
     QTimer::singleShot(5000, &loop, &QEventLoop::quit);
     loop.exec();
-    // Read any remaining data
-    if (socket.bytesAvailable() > 0) {
-        response.append(socket.readAll());
-    }
+    if (socket.bytesAvailable() > 0) response.append(socket.readAll());
     return response;
 }
 
@@ -81,10 +63,7 @@ QByteArray TestIntegration::httpPost(const QString& path, const QByteArray& body
     if (!socket.waitForConnected(5000)) return QByteArray();
 
     QByteArray request = QString("POST %1 HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: %2\r\nContent-Length: %3\r\nConnection: close\r\n\r\n")
-                             .arg(path)
-                             .arg(contentType)
-                             .arg(body.size())
-                             .toUtf8();
+                             .arg(path).arg(contentType).arg(body.size()).toUtf8();
     request.append(body);
     socket.write(request);
     if (!socket.waitForBytesWritten(5000)) return QByteArray();
@@ -95,14 +74,10 @@ QByteArray TestIntegration::httpPost(const QString& path, const QByteArray& body
     QObject::connect(&socket, &QTcpSocket::readyRead, &socket, [&]() {
         response.append(socket.readAll());
     });
-    if (socket.bytesAvailable() > 0) {
-        response.append(socket.readAll());
-    }
+    if (socket.bytesAvailable() > 0) response.append(socket.readAll());
     QTimer::singleShot(5000, &loop, &QEventLoop::quit);
     loop.exec();
-    if (socket.bytesAvailable() > 0) {
-        response.append(socket.readAll());
-    }
+    if (socket.bytesAvailable() > 0) response.append(socket.readAll());
     return response;
 }
 
@@ -133,7 +108,6 @@ void TestIntegration::testHttpGetRoot()
 
 void TestIntegration::testHttpGetSharePage()
 {
-    // Create a share first
     QString token = m_shareManager->createShare("C:/integration_test.txt", false, 24, 0, "");
     QVERIFY(!token.isEmpty());
 
@@ -149,17 +123,14 @@ void TestIntegration::testHttpGetNotFound()
 {
     QByteArray response = httpGet("/s/nonexistent_token");
     int status = extractStatusCode(response);
-    // Should return 200 with error page (design choice in current code)
     QVERIFY(status == 200 || status == 404);
 }
 
 void TestIntegration::testHttpPostUpload()
 {
-    // Create a share for the upload context
     QString token = m_shareManager->createShare("C:/upload_test.txt", false, 24, 0, "");
     QVERIFY(!token.isEmpty());
 
-    // Simple multipart form-data
     QString boundary = "----TestBoundary12345";
     QByteArray body;
     body.append("--" + boundary.toUtf8() + "\r\n");
@@ -178,8 +149,6 @@ void TestIntegration::testHttpPostUpload()
 
 void TestIntegration::testHttpCorsHeaders()
 {
-    // CORS is handled in handleClientSocket before dispatching to routes.
-    // Test via a simple GET request - all responses include CORS headers
     QByteArray response = httpGet("/");
     QVERIFY2(response.contains("Access-Control-Allow-Origin"),
              "CORS header not found in response");
@@ -192,7 +161,7 @@ void TestIntegration::testShareCreationAndAccess()
 
     ShareInfo info = m_shareManager->getShareInfo(token);
     QVERIFY(info.isValid());
-    QVERIFY(!info.isExpired()); // never expires
+    QVERIFY(!info.isExpired());
     QCOMPARE(info.filePath, QString("C:/e2e_test.txt"));
 
     m_shareManager->cancelShare(token);
@@ -215,19 +184,17 @@ void TestIntegration::testShareWithPassword()
 
 void TestIntegration::testShareExpiry()
 {
-    // Create share that expires in 1 hour
     QString token = m_shareManager->createShare("C:/expiring.txt", false, 1, 0, "");
     ShareInfo info = m_shareManager->getShareInfo(token);
-    QVERIFY(!info.isExpired()); // not expired yet
+    QVERIFY(!info.isExpired());
     QVERIFY(!info.expiresAt.isNull());
 
     m_shareManager->cancelShare(token);
 
-    // Create never-expiring share
     token = m_shareManager->createShare("C:/permanent.txt", false, 0, 0, "");
     info = m_shareManager->getShareInfo(token);
     QVERIFY(!info.isExpired());
-    QVERIFY(info.expiresAt.isNull()); // null = never expires
+    QVERIFY(info.expiresAt.isNull());
 
     m_shareManager->cancelShare(token);
 }

@@ -3,10 +3,11 @@
 
 #include <QObject>
 #include <QTimer>
-#include "HttpServer.h"
+#include "CivetWebServer.h"
 #include "IShareManager.h"
 #include "IFileBrowser.h"
 #include "IFolderPacker.h"
+#include "StreamingMultipartParser.h"
 
 struct UploadedFile {
     QString fileName;
@@ -14,7 +15,6 @@ struct UploadedFile {
 };
 
 class FileTransferEngine;
-class StreamingMultipartParser;
 class TransferLogService;
 
 struct StreamingUploadState {
@@ -23,23 +23,25 @@ struct StreamingUploadState {
     QString remoteAddress;
     bool isReceive;
     bool finished = false;
-    qint64 currentFileTransferred = 0; // Bytes transferred for current file being parsed
-    QString uploadTaskId;              // FileTransferEngine task ID for progress tracking
+    qint64 currentFileTransferred = 0;
+    qint64 bytesReceived = 0;
+    QString uploadTaskId;
+
+    StreamingUploadState() : parser(nullptr), isReceive(false) {}
 };
 
-// Streaming state for /api/upload/file route (chunked or small file upload)
 struct StreamingFileUploadState {
     QString sessionId;
     QString filePath;
-    int chunkIndex = -1;       // -1 means small file mode (multipart)
+    int chunkIndex = -1;
     bool isChunked = false;
     bool finished = false;
-    // Chunked mode: file handle for streaming write
     QFile* chunkFile = nullptr;
     qint64 bytesReceived = 0;
     qint64 expectedSize = 0;
-    // Small file mode: streaming multipart parser
-    StreamingMultipartParser* parser = nullptr;
+    StreamingMultipartParser* parser;
+
+    StreamingFileUploadState() : parser(nullptr) {}
 };
 
 struct SavedFileInfo {
@@ -56,29 +58,32 @@ struct ChunkUploadInfo {
 };
 
 struct FileChunkState {
-    QString relativePath;       // File relative path
-    qint64 fileSize = 0;        // Total file size
-    int chunkSize = 0;          // Chunk size in bytes
-    int totalChunks = 0;        // Total number of chunks
-    QList<ChunkUploadInfo> chunks; // Per-chunk state
-    int completedChunks = 0;    // Number of completed chunks
-    bool useChunking = false;   // Whether to use chunked upload
+    QString relativePath;
+    qint64 fileSize = 0;
+    int chunkSize = 0;
+    int totalChunks = 0;
+    QList<ChunkUploadInfo> chunks;
+    int completedChunks = 0;
+    bool useChunking = false;
 };
 
 struct UploadSession {
     QString sessionId;
-    QString taskId;         // FileTransferEngine task ID
-    QString folder;         // Folder root name
-    qint64 totalSize;       // Total upload size
-    qint64 transferredSize; // Bytes transferred so far
-    int fileCount;          // Total file count
+    QString taskId;
+    QString folder;
+    qint64 totalSize;
+    qint64 transferredSize;
+    int fileCount;
     QString remoteAddress;
-    QList<SavedFileInfo> savedFiles; // Files saved by /api/upload/file (small file mode) or merged files
-    QDateTime createdAt;    // Session creation time for timeout cleanup
-    // Chunked upload state
-    QMap<QString, FileChunkState> fileChunkStates; // key = relativePath
-    QString chunkTempDir;   // Temporary chunk directory: <uploadDir>/.chunks/<sessionId>
+    QList<SavedFileInfo> savedFiles;
+    QDateTime createdAt;
+    QMap<QString, FileChunkState> fileChunkStates;
+    QString chunkTempDir;
+    bool paused = false;
+    QDateTime pausedAt;
 };
+
+Q_DECLARE_METATYPE(SavedFileInfo)
 
 class RequestHandler : public QObject
 {
@@ -91,7 +96,7 @@ public:
                             QObject* parent = nullptr);
     ~RequestHandler() override;
 
-    void registerRoutes(HttpServer* server);
+    void registerRoutes(CivetWebServer* server);
 
     void setUploadDir(const QString& dir);
     QString uploadDir() const;
@@ -100,35 +105,45 @@ public:
     void setTransferEngine(FileTransferEngine* engine);
     void setTransferLogService(TransferLogService* service);
 
-    // Get token for a given task ID (for WebSocket progress routing)
     QString tokenForTask(const QString& taskId) const;
-
-    // Get share token for a given task ID (for WebSocket progress routing to share page subscribers)
     QString shareTokenForTask(const QString& taskId) const;
+
+    void pauseUploadForTask(const QString& taskId);
+    void resumeUploadForTask(const QString& taskId);
 
 signals:
     void fileDownloaded(const QString& fileName, qint64 fileSize, const QString& remoteAddress);
     void fileUploaded(const QString& fileName, qint64 fileSize, const QString& remoteAddress);
 
+    void uploadFinalizeReady(const QList<SavedFileInfo>& savedFiles, const QString& taskId,
+                             const QString& folder, bool isFolder, qint64 totalSize,
+                             const QString& remoteAddr);
+
+private slots:
+    void onUploadFinalizeReady(const QList<SavedFileInfo>& savedFiles, const QString& taskId,
+                               const QString& folder, bool isFolder, qint64 totalSize,
+                               const QString& remoteAddr);
+
 private:
-    void handleSharePage(const HttpRequest& request, HttpResponse& response);
-    void handleFileDownload(const HttpRequest& request, HttpResponse& response);
-    void handleFolderDownload(const HttpRequest& request, HttpResponse& response);
-    void handleApiShares(const HttpRequest& request, HttpResponse& response);
-    void handleApiFiles(const HttpRequest& request, HttpResponse& response);
-    void handleUploadPage(const HttpRequest& request, HttpResponse& response);
+    int handleSharePage(mg_connection* conn, const HttpRequestInfo& info);
+    int handleFileDownload(mg_connection* conn, const HttpRequestInfo& info);
+    int handleFolderDownload(mg_connection* conn, const HttpRequestInfo& info);
+    int handleApiShares(mg_connection* conn, const HttpRequestInfo& info);
+    int handleApiFiles(mg_connection* conn, const HttpRequestInfo& info);
+    int handleUploadPage(mg_connection* conn, const HttpRequestInfo& info);
 
-    // Streaming upload handler - called with each body chunk (legacy /receive route)
-    void handleStreamingUpload(QTcpSocket* socket, const HttpRequest& request, const QByteArray& chunk, bool isLast);
+    int handleStreamingUpload(mg_connection* conn, const HttpRequestInfo& info,
+                              const QByteArray& chunk, bool isLast);
 
-    // Streaming file upload handler for /api/upload/file route
-    void handleStreamingFileUpload(QTcpSocket* socket, const HttpRequest& request, const QByteArray& chunk, bool isLast);
+    int handleStreamingFileUpload(mg_connection* conn, const HttpRequestInfo& info,
+                                  const QByteArray& chunk, bool isLast);
 
-    // Resume-capable upload handlers (chunked upload for large files, direct upload for small files)
-    void handleUploadCheck(const HttpRequest& request, HttpResponse& response);
-    void handleUploadSingleFile(const HttpRequest& request, HttpResponse& response);
-    void handleUploadFinalize(const HttpRequest& request, HttpResponse& response);
-    void handleUploadAbort(const HttpRequest& request, HttpResponse& response);
+    int handleUploadCheck(mg_connection* conn, const HttpRequestInfo& info);
+    int handleUploadSingleFile(mg_connection* conn, const HttpRequestInfo& info);
+    int handleUploadFinalize(mg_connection* conn, const HttpRequestInfo& info);
+    int handleUploadAbort(mg_connection* conn, const HttpRequestInfo& info);
+    int handleUploadPause(mg_connection* conn, const HttpRequestInfo& info);
+    int handleUploadResume(mg_connection* conn, const HttpRequestInfo& info);
     void cleanupExpiredSessions();
 
     QByteArray generateSharePage(const QString& token, const QString& filePath, bool isFolder) const;
@@ -149,21 +164,12 @@ private:
     TransferLogService* m_transferLogService;
     SettingsManager* m_settingsManager;
     QString m_uploadDir;
-    HttpServer* m_httpServer = nullptr;
+    CivetWebServer* m_civetServer = nullptr;
 
-    // Per-socket streaming upload state (legacy /receive route only)
-    QHash<QTcpSocket*, StreamingUploadState*> m_streamingStates;
-
-    // Per-socket streaming file upload state (/api/upload/file route)
-    QHash<QTcpSocket*, StreamingFileUploadState*> m_streamingFileStates;
-
-    // Upload sessions for tracking folder upload progress
+    QHash<mg_connection*, StreamingUploadState*> m_streamingStates;
+    QHash<mg_connection*, StreamingFileUploadState*> m_streamingFileStates;
     QHash<QString, UploadSession> m_uploadSessions;
-
-    // Timer for cleaning up expired upload sessions
     QTimer* m_sessionCleanupTimer = nullptr;
-
-    // Task ID to token mapping for WebSocket progress routing
     QMap<QString, QString> m_taskToToken;
     QMap<QString, QString> m_taskToShareToken;
 };

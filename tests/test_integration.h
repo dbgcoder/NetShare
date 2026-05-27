@@ -5,10 +5,9 @@
 #include <QtTest/QtTest>
 #include <QTcpSocket>
 
-class HttpServer;
+class CivetWebServer;
 class RequestHandler;
 class ShareManager;
-class TransferLogService;
 
 class TestIntegration : public QObject
 {
@@ -22,7 +21,6 @@ private slots:
     void initTestCase();
     void cleanupTestCase();
 
-    // End-to-end HTTP server tests
     void testHttpServerStartStop();
     void testHttpGetRoot();
     void testHttpGetSharePage();
@@ -30,15 +28,15 @@ private slots:
     void testHttpPostUpload();
     void testHttpCorsHeaders();
 
-    // Share + HTTP integration
     void testShareCreationAndAccess();
     void testShareWithPassword();
     void testShareExpiry();
 
 private:
-    HttpServer* m_server;
-    ShareManager* m_shareManager;
-    quint16 m_port;
+    CivetWebServer* m_server = nullptr;
+    RequestHandler* m_requestHandler = nullptr;
+    ShareManager* m_shareManager = nullptr;
+    quint16 m_port = 18080;
 
     QByteArray httpGet(const QString& path);
     QByteArray httpPost(const QString& path, const QByteArray& body, const QString& contentType);

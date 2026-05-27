@@ -27,6 +27,7 @@ Rectangle {
         function onTaskCancelled(taskId) { refreshTasks() }
         function onTaskPaused(taskId) { refreshTasks() }
         function onTaskResumed(taskId) { refreshTasks() }
+        function onTaskDeleted(taskId) { refreshTasks() }
     }
 
     function refreshTasks() {
@@ -86,17 +87,21 @@ Rectangle {
                 var log = logs[j]
 
                 // Map TransferLogEntry status to TransferTask status
-                // TransferLogEntry.Status: Started=0, Completed=2, Failed=3, Cancelled=4
+                // TransferLogEntry.Status: Started=0, Completed=1, Failed=2, Cancelled=3, Paused=4
                 // TransferTask.Status: Pending=0, Preparing=1, Downloading=2, Uploading=3, Paused=4, Completed=5, Failed=6, Cancelled=7
                 var mappedStatus = 5 // default to Completed
-                if (log.status === 0) mappedStatus = 5 // Started->Completed (log entries are final states)
-                else if (log.status === 2) mappedStatus = 5 // Completed
-                else if (log.status === 3) mappedStatus = 6 // Failed
-                else if (log.status === 4) mappedStatus = 7 // Cancelled
+                if (log.status === 0) {
+                    // Started = in-progress, map to Downloading/Uploading based on type
+                    mappedStatus = (log.type === 1) ? 3 : 2
+                } else if (log.status === 1) mappedStatus = 5 // Completed
+                else if (log.status === 2) mappedStatus = 6 // Failed
+                else if (log.status === 3) mappedStatus = 7 // Cancelled
+                else if (log.status === 4) mappedStatus = 4 // Paused
 
                 // Skip if already shown as an active engine task (dedup by type:fileName)
                 var logKey = log.type + ":" + log.fileName
                 if (activeFileNames[logKey]) continue
+                activeFileNames[logKey] = true
 
                 // Apply filter
                 // TransferLogEntry.Type: DownloadLog=0, UploadLog=1
@@ -113,7 +118,7 @@ Rectangle {
                 var logSizeText = formatFileSize(log.fileSize)
 
                 taskListModel.append({
-                    taskId: log.id,
+                    taskId: log.taskId && log.taskId.length > 0 ? log.taskId : log.id,
                     fileName: log.fileName || "未知文件",
                     typeText: logTypeText,
                     typeIcon: logTypeIcon,
@@ -268,11 +273,7 @@ Rectangle {
                         }
                     }
                     for (var j = 0; j < toRemove.length; j++) {
-                        transferEngine.cancelTask(toRemove[j])
-                    }
-                    // Also clear log entries from database
-                    if (typeof transferLogService !== 'undefined') {
-                        transferLogService.clearLogs(0)
+                        transferEngine.deleteTask(toRemove[j])
                     }
                 }
             }
@@ -444,22 +445,21 @@ Rectangle {
                         }
 
                         Button {
-                            visible: !model.fromLog && model.status !== 5 && model.status !== 7
+                            visible: true
                             implicitWidth: 28
                             implicitHeight: 28
                             contentItem: Label {
-                                text: "✕"
+                                text: "❌"
                                 horizontalAlignment: Text.AlignHCenter
-                                font.pixelSize: 14
-                                color: Theme.errorColor
+                                font.pixelSize: 13
                             }
                             background: Rectangle {
                                 color: parent.hovered ? "#3e3e42" : "transparent"
                                 radius: 4
                             }
-                            ToolTip.text: "取消"
+                            ToolTip.text: "删除"
                             ToolTip.visible: hovered
-                            onClicked: transferEngine.cancelTask(model.taskId)
+                            onClicked: transferEngine.deleteTask(model.taskId)
                         }
                     }
                 }

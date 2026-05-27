@@ -272,6 +272,9 @@ var xhrProgressActive = false;
 var ws = null;
 var wsConnected = false;
 var MAX_CONCURRENT = 3;
+var uploadStartTime = 0;
+var uploadSpeedHistory = [];
+var activeChunkProgress = {};
 
 // ===== DOM refs =====
 var uploadArea = document.getElementById('uploadArea');
@@ -290,8 +293,7 @@ function connectWebSocket() {
         }
         return;
     }
-    var wsPort = location.port ? parseInt(location.port) + 1 : 8081;
-    var wsUrl = 'ws://' + location.hostname + ':' + wsPort;
+    var wsUrl = 'ws://' + location.host + '/ws';
     try { ws = new WebSocket(wsUrl); } catch (e) { return; }
 
     ws.onopen = function() {
@@ -311,7 +313,7 @@ function connectWebSocket() {
                 if (pct) pct.textContent = msg.data.progress + '%';
                 if (msg.data.speed) {
                     var st = document.getElementById('statusText');
-                    if (st) st.textContent = '发送中... ' + formatSize(msg.data.speed) + '/s';
+                    if (st) st.textContent = '发送中... ' + msg.data.progress + '%  ' + formatSize(msg.data.speed) + '/s';
                 }
             }
         } catch (ex) {}
@@ -481,6 +483,20 @@ function formatSize(b) {
     return (b / 1073741824).toFixed(1) + ' GB';
 }
 
+function calcUploadSpeed(currentBytes) {
+    var now = Date.now();
+    if (uploadStartTime === 0) { uploadStartTime = now; return 0; }
+    var elapsed = (now - uploadStartTime) / 1000;
+    if (elapsed < 0.5) return 0;
+    uploadSpeedHistory.push({ time: now, bytes: currentBytes });
+    while (uploadSpeedHistory.length > 20) uploadSpeedHistory.shift();
+    if (uploadSpeedHistory.length < 2) return 0;
+    var first = uploadSpeedHistory[0];
+    var dt = (now - first.time) / 1000;
+    if (dt < 0.3) return 0;
+    return Math.round((currentBytes - first.bytes) / dt);
+}
+
 function escapeHtml(s) {
     return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
@@ -504,6 +520,9 @@ async function startUpload() {
     chunkInfo = {};
     xhrProgressActive = false;
     uploadSessionId = '';
+    uploadStartTime = 0;
+    uploadSpeedHistory = [];
+    activeChunkProgress = {};
     selectedFiles.forEach(function(item) { uploadStatus[item.relativePath] = 'pending'; });
 
     document.getElementById('progressWrap').classList.add('active');
@@ -657,16 +676,21 @@ function uploadChunked(item, info) {
                         xhr.upload.onprogress = function(e) {
                             if (e.lengthComputable) {
                                 xhrProgressActive = true;
-                                var cb = uploadedSize + e.loaded;
+                                activeChunkProgress[ci] = e.loaded;
+                                var activeLoaded = 0;
+                                for (var k in activeChunkProgress) activeLoaded += activeChunkProgress[k];
+                                var cb = uploadedSize + activeLoaded;
                                 var pct = Math.min(100, Math.round(cb / totalUploadSize * 100));
                                 var fill = document.getElementById('progressFill');
                                 if (fill) fill.style.width = pct + '%';
                                 var st = document.getElementById('statusText');
-                                if (st) st.textContent = formatSize(cb) + ' / ' + formatSize(totalUploadSize);
+                                var spd = calcUploadSpeed(cb);
+                                if (st) st.textContent = formatSize(cb) + ' / ' + formatSize(totalUploadSize) + '  ' + formatSize(spd) + '/s';
                             }
                         };
                         xhr.onload = function() {
                             xhrProgressActive = false;
+                            delete activeChunkProgress[ci];
                             if (xhr.status === 200) {
                                 info.completedChunks.add(ci);
                                 uploadedSize += blob.size;
@@ -676,7 +700,7 @@ function uploadChunked(item, info) {
                                 doNext();
                             }
                         };
-                        xhr.onerror = function() { xhrProgressActive = false; failedChunks.push(ci); doNext(); };
+                        xhr.onerror = function() { xhrProgressActive = false; delete activeChunkProgress[ci]; failedChunks.push(ci); doNext(); };
                         xhr.timeout = 0;
                         xhr.send(blob);
                     }
@@ -726,7 +750,8 @@ function uploadSmall(item, info) {
                 var fill = document.getElementById('progressFill');
                 var st = document.getElementById('statusText');
                 if (fill) fill.style.width = pct + '%';
-                if (st) st.textContent = formatSize(totalLoaded) + ' / ' + formatSize(item.file.size);
+                var spd = calcUploadSpeed(uploadedSize + totalLoaded);
+                if (st) st.textContent = formatSize(totalLoaded) + ' / ' + formatSize(item.file.size) + '  ' + formatSize(spd) + '/s';
             }
         };
         xhr.timeout = 0;
@@ -752,7 +777,8 @@ function updateProgress(done, total, doneSz, totalSz) {
     var pctEl = document.getElementById('progressText');
     if (pctEl) pctEl.textContent = pct + '% (' + done + '/' + total + ')';
     var st = document.getElementById('statusText');
-    if (st) st.textContent = '发送中... ' + formatSize(doneSz) + ' / ' + formatSize(totalSz);
+    var spd = calcUploadSpeed(doneSz);
+    if (st) st.textContent = '发送中... ' + formatSize(doneSz) + ' / ' + formatSize(totalSz) + '  ' + formatSize(spd) + '/s';
 }
 
 function updateFileStatus(relativePath, statusText) {

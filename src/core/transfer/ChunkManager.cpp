@@ -44,20 +44,26 @@ QVariantList ChunkManager::splitFileForThreads(qint64 fileSize, int threadCount)
 bool ChunkManager::mergeChunks(const QString& chunkDir, const QString& outputPath, int totalChunks)
 {
     QFile outFile(outputPath);
-    if (!outFile.open(QIODevice::WriteOnly)) {
+    if (!outFile.open(QIODevice::WriteOnly | QIODevice::Unbuffered)) {
         LOG_ERROR("ChunkManager: cannot open output file: %s", qPrintable(outputPath));
         emit mergeFailed("Cannot open output file");
         return false;
     }
 
-    // Use streaming copy to avoid loading entire chunk into memory at once
-    static const int COPY_BUF_SIZE = 1024 * 1024; // 1MB buffer
+    qint64 totalSize = 0;
+    for (int i = 0; i < totalChunks; ++i) {
+        QString chunkPath = chunkDir + QString("/chunk_%1").arg(i, 6, 10, QChar('0'));
+        totalSize += QFileInfo(chunkPath).size();
+    }
+    if (totalSize > 0) outFile.resize(totalSize);
+
+    static const int COPY_BUF_SIZE = 8 * 1024 * 1024;
     QByteArray buf(COPY_BUF_SIZE, Qt::Uninitialized);
 
     for (int i = 0; i < totalChunks; ++i) {
         QString chunkPath = chunkDir + QString("/chunk_%1").arg(i, 6, 10, QChar('0'));
         QFile chunkFile(chunkPath);
-        if (!chunkFile.open(QIODevice::ReadOnly)) {
+        if (!chunkFile.open(QIODevice::ReadOnly | QIODevice::Unbuffered)) {
             LOG_ERROR("ChunkManager: missing chunk %d", i);
             outFile.close();
             emit mergeFailed(QString("Missing chunk %1").arg(i));
@@ -67,7 +73,16 @@ bool ChunkManager::mergeChunks(const QString& chunkDir, const QString& outputPat
         while (true) {
             qint64 bytesRead = chunkFile.read(buf.data(), COPY_BUF_SIZE);
             if (bytesRead <= 0) break;
-            outFile.write(buf.constData(), bytesRead);
+            qint64 written = 0;
+            while (written < bytesRead) {
+                qint64 w = outFile.write(buf.constData() + written, bytesRead - written);
+                if (w <= 0) {
+                    outFile.close(); chunkFile.close();
+                    emit mergeFailed("Write error");
+                    return false;
+                }
+                written += w;
+            }
         }
         chunkFile.close();
 
@@ -165,11 +180,7 @@ void ChunkManager::cleanupChunks(const QString& chunkDir)
 {
     QDir dir(chunkDir);
     if (dir.exists()) {
-        QStringList chunks = dir.entryList(QStringList() << "chunk_*", QDir::Files);
-        for (const QString& chunk : chunks) {
-            dir.remove(chunk);
-        }
-        dir.rmdir(chunkDir);
+        dir.removeRecursively();
         LOG_INFO("ChunkManager: cleaned up chunks in %s", qPrintable(chunkDir));
     }
 }

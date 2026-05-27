@@ -531,19 +531,6 @@ Rectangle {
 
                         Rectangle {
                             width: 32; height: 32; radius: 4
-                            color: openMouse.containsMouse ? "#3e3e42" : "transparent"
-                            ToolTip.visible: openMouse.containsMouse
-                            ToolTip.text: qsTr("打开文件")
-                            Label { anchors.centerIn: parent; text: "📂"; font.pixelSize: 14 }
-                            MouseArea {
-                                id: openMouse
-                                anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                                onClicked: shareManager.openReceivedFile(modelData.token)
-                            }
-                        }
-
-                        Rectangle {
-                            width: 32; height: 32; radius: 4
                             color: folderMouse.containsMouse ? "#3e3e42" : "transparent"
                             ToolTip.visible: folderMouse.containsMouse
                             ToolTip.text: qsTr("打开文件夹")
@@ -552,21 +539,6 @@ Rectangle {
                                 id: folderMouse
                                 anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                                 onClicked: shareManager.openReceivedFileFolder(modelData.token)
-                            }
-                        }
-
-                        Rectangle {
-                            width: 32; height: 32; radius: 4
-                            color: linkMouse.containsMouse ? "#3e3e42" : "transparent"
-                            ToolTip.visible: linkMouse.containsMouse
-                            ToolTip.text: qsTr("复制链接")
-                            Label { anchors.centerIn: parent; text: "🔗"; font.pixelSize: 14 }
-                            MouseArea {
-                                id: linkMouse
-                                anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    copyFileLink(modelData.token)
-                                }
                             }
                         }
 
@@ -585,17 +557,21 @@ Rectangle {
                             }
                         }
 
-                        Rectangle {
-                            width: 32; height: 32; radius: 4
-                            color: deleteMouse.containsMouse ? "#e81123" : "transparent"
-                            ToolTip.visible: deleteMouse.containsMouse
-                            ToolTip.text: qsTr("删除")
-                            Label { anchors.centerIn: parent; text: "🗑"; font.pixelSize: 14 }
-                            MouseArea {
-                                id: deleteMouse
-                                anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                                onClicked: shareManager.deleteReceivedFile(modelData.token)
+                        Button {
+                            implicitWidth: 32
+                            implicitHeight: 32
+                            contentItem: Label {
+                                text: "❌"
+                                horizontalAlignment: Text.AlignHCenter
+                                font.pixelSize: 16
                             }
+                            background: Rectangle {
+                                color: parent.hovered ? "#3e3e42" : "transparent"
+                                radius: 4
+                            }
+                            ToolTip.text: qsTr("删除")
+                            ToolTip.visible: hovered
+                            onClicked: shareManager.deleteReceivedFile(modelData.token)
                         }
                     }
                 }

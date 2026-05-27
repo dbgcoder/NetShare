@@ -23,9 +23,13 @@
 | 属性 | 值 |
 |------|---|
 | 基础 URL | `http://localhost:8080/api` |
-| HTTPS URL | `https://localhost:8443/api` |
+| HTTPS URL | `https://localhost:8080/api`（TLS 启用时同端口） |
+| WebSocket URL | `ws://localhost:8080/ws`（与 HTTP 同端口） |
+| WSS URL | `wss://localhost:8080/ws`（TLS 启用时） |
 | 内容类型 | `application/json` |
 | 字符编码 | UTF-8 |
+| HTTP 服务器 | CivetWeb 嵌入式 Web 服务器 |
+| CORS | 所有响应自动附带 CORS 头 |
 
 ### 请求格式
 
@@ -875,7 +879,6 @@ GET /api/settings
     "data": {
         "server": {
             "port": 8080,
-            "httpsPort": 8443,
             "tlsEnabled": false,
             "bindAddress": "0.0.0.0"
         },
@@ -1104,40 +1107,62 @@ GET /api/status
 
 ## WebSocket 接口
 
+> CivetWeb 迁移后，WebSocket 与 HTTP 共用同一端口，端点路径为 `/ws`。
+> 支持 `ws://` 和 `wss://`（TLS 启用时）协议。
+
 ### 连接
 
 ```http
 ws://localhost:8080/ws
 ```
 
-### 认证
+TLS 启用时：
 
-```json
-{
-    "type": "auth",
-    "token": "your-token"
-}
+```http
+wss://localhost:8080/ws
 ```
 
 ### 订阅传输进度
 
+连接后发送订阅消息，绑定到特定分享 token：
+
 ```json
 {
     "type": "subscribe",
-    "channel": "transfer",
-    "taskId": "task-001"
+    "data": {
+        "token": "a1b2c3d4e5f6"
+    }
+}
+```
+
+### 取消订阅
+
+```json
+{
+    "type": "unsubscribe",
+    "data": {
+        "token": "a1b2c3d4e5f6"
+    }
 }
 ```
 
 ### 接收进度更新
 
+服务器会向订阅了特定 token 的客户端广播传输进度：
+
 ```json
 {
-    "type": "transfer_progress",
-    "taskId": "task-001",
-    "progress": 50,
-    "speed": 1048576,
-    "downloadedSize": 52428800,
-    "totalSize": 104857600
+    "type": "transfer_update",
+    "data": {
+        "progress": 50,
+        "speed": 1048576,
+        "taskId": "task-001"
+    }
 }
 ```
+
+### 心跳保活
+
+服务器每 30 秒发送 WebSocket Ping 帧，客户端应回复 Pong。
+若 60 秒内未收到 Pong，服务器将断开连接。
+客户端断开后会自动清理订阅关系。

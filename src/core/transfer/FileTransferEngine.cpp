@@ -78,6 +78,43 @@ FileTransferEngine::FileTransferEngine(QObject* parent)
 {
     m_tempDirectory = QStandardPaths::writableLocation(QStandardPaths::TempLocation) + "/NetShare";
     QDir().mkpath(m_tempDirectory);
+
+    m_speedCheckTimer = new QTimer(this);
+    connect(m_speedCheckTimer, &QTimer::timeout, this, [this]() {
+        qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+        for (auto it = m_tasks.begin(); it != m_tasks.end(); ++it) {
+            auto& task = it.value();
+            if (task.status != TransferTask::Uploading && task.status != TransferTask::Downloading)
+                continue;
+
+            auto lastIt = m_lastProgressTime.find(it.key());
+            if (lastIt == m_lastProgressTime.end()) continue;
+
+            qint64 elapsed = nowMs - lastIt.value();
+
+            if (elapsed > 180000) {
+                task.status = TransferTask::Paused;
+                task.speed = 0;
+                m_speedHistory.remove(it.key());
+                if (m_bandwidthManager) m_bandwidthManager->removeRecord(it.key());
+
+                if (m_transferLogService) {
+                    int logType = (task.type == TransferTask::Upload) ? TransferLogEntry::UploadLog : TransferLogEntry::DownloadLog;
+                    m_transferLogService->logTransfer(logType, task.fileName, task.filePath,
+                        task.fileSize, QString(), TransferLogEntry::Paused,
+                        QString(), task.transferredSize, task.taskId);
+                }
+
+                emit taskPaused(it.key());
+                LOG_INFO("Task %s auto-paused after 3min inactivity", qPrintable(it.key()));
+            } else if (elapsed > 3000 && task.speed > 0) {
+                task.speed = 0;
+                m_speedHistory.remove(it.key());
+                emit taskProgress(it.key(), task.progress, 0);
+            }
+        }
+    });
+    m_speedCheckTimer->start(30000);
 }
 
 void FileTransferEngine::setManagers(ShareManager* sm, ChunkManager* cm, ResumeManager* rm, BandwidthManager* bm)
@@ -101,29 +138,47 @@ void FileTransferEngine::setTransferLogService(TransferLogService* tls)
     m_transferLogService = tls;
 }
 
+void FileTransferEngine::setUploadPauseCallback(std::function<void(const QString&)> cb)
+{
+    m_uploadPauseCallback = cb;
+}
+
+void FileTransferEngine::setUploadResumeCallback(std::function<void(const QString&)> cb)
+{
+    m_uploadResumeCallback = cb;
+}
+
 FileTransferEngine::~FileTransferEngine() = default;
 
 bool FileTransferEngine::initialize()
 {
-    // Restore paused download tasks from database
     if (m_transferLogService) {
-        QVariantList pausedLogs = m_transferLogService->pausedLogsForRestore();
-        for (const QVariant& v : pausedLogs) {
+        QVariantList restorable = m_transferLogService->restorableLogs();
+        for (const QVariant& v : restorable) {
             TransferLogEntry entry = v.value<TransferLogEntry>();
+            if (entry.fileName.isEmpty() && entry.fileSize <= 0) continue;
+
             TransferTask task;
             task.taskId = entry.taskId;
-            task.type = TransferTask::Download; // Only download tasks support pause persistence
-            task.status = TransferTask::Paused;
+            task.type = (entry.type == TransferLogEntry::UploadLog) ? TransferTask::Upload : TransferTask::Download;
             task.fileName = entry.fileName;
             task.filePath = entry.filePath;
             task.fileSize = entry.fileSize;
             task.transferredSize = entry.transferredSize;
             task.progress = task.fileSize > 0 ? static_cast<int>((task.transferredSize * 100) / task.fileSize) : 0;
-            task.startedAt = QDateTime::currentDateTime();
+            task.startedAt = entry.timestamp.isValid() ? entry.timestamp : QDateTime::currentDateTime();
+
+            if (entry.status == TransferLogEntry::Paused) {
+                task.status = TransferTask::Paused;
+            } else {
+                task.status = (task.type == TransferTask::Upload) ? TransferTask::Uploading : TransferTask::Downloading;
+            }
 
             if (!task.taskId.isEmpty()) {
                 m_tasks[task.taskId] = task;
-                LOG_INFO("Restored paused download task: %s (%s)", qPrintable(task.taskId), qPrintable(task.fileName));
+                m_lastProgressTime[task.taskId] = QDateTime::currentMSecsSinceEpoch();
+                LOG_INFO("Restored task: %s (%s) type=%d status=%d",
+                         qPrintable(task.taskId), qPrintable(task.fileName), task.type, task.status);
             }
         }
     }
@@ -134,16 +189,21 @@ bool FileTransferEngine::initialize()
 
 void FileTransferEngine::stopAllTasks()
 {
-    // Persist paused download tasks to database before clearing
     if (m_transferLogService) {
         for (auto it = m_tasks.constBegin(); it != m_tasks.constEnd(); ++it) {
             const TransferTask& task = it.value();
-            if (task.status == TransferTask::Paused && task.type == TransferTask::Download) {
-                m_transferLogService->logTransfer(
-                    TransferLogEntry::DownloadLog, task.fileName, task.filePath,
+            int logType = (task.type == TransferTask::Upload) ? TransferLogEntry::UploadLog : TransferLogEntry::DownloadLog;
+
+            if (task.status == TransferTask::Paused) {
+                m_transferLogService->logTransfer(logType, task.fileName, task.filePath,
                     task.fileSize, QString(), TransferLogEntry::Paused,
                     QString(), task.transferredSize, task.taskId);
-                LOG_INFO("Persisted paused download task: %s", qPrintable(task.taskId));
+                LOG_INFO("Persisted paused task: %s", qPrintable(task.taskId));
+            } else if (task.status == TransferTask::Uploading || task.status == TransferTask::Downloading) {
+                m_transferLogService->logTransfer(logType, task.fileName, task.filePath,
+                    task.fileSize, QString(), TransferLogEntry::Started,
+                    QString(), task.transferredSize, task.taskId);
+                LOG_INFO("Persisted in-progress task: %s", qPrintable(task.taskId));
             }
         }
     }
@@ -214,10 +274,16 @@ void FileTransferEngine::performDownload(const QString& taskId, const ShareInfo&
         ChunkInfo chunk = v.value<ChunkInfo>();
         QString chunkPath = chunkDir + QString("/chunk_%1").arg(chunk.index, 6, 10, QChar('0'));
 
-        // If resuming and chunk already exists, skip it
-        if (hasResume && QFileInfo::exists(chunkPath)) {
-            LOG_INFO("Skipping existing chunk %d for task %s", chunk.index, qPrintable(taskId));
-            continue;
+        // If resuming, check if chunk already exists and is complete
+        if (hasResume) {
+            QFileInfo fi(chunkPath);
+            if (fi.exists() && fi.size() == chunk.size) {
+                LOG_INFO("Skipping complete chunk %d for task %s", chunk.index, qPrintable(taskId));
+                continue;
+            } else if (fi.exists()) {
+                QFile::remove(chunkPath);
+                LOG_INFO("Removing incomplete chunk %d for task %s", chunk.index, qPrintable(taskId));
+            }
         }
 
         // Construct URL - assuming local server is running on port 8080
@@ -335,11 +401,13 @@ bool FileTransferEngine::pauseTask(const QString& taskId)
         m_tasks[taskId].speed = 0;
         if (m_bandwidthManager) m_bandwidthManager->removeRecord(taskId);
 
-        // Persist paused download tasks to database
-        if (m_transferLogService && m_tasks[taskId].type == TransferTask::Download) {
+        if (m_uploadPauseCallback && m_tasks[taskId].type == TransferTask::Upload)
+            m_uploadPauseCallback(taskId);
+
+        if (m_transferLogService) {
             const TransferTask& task = m_tasks[taskId];
-            m_transferLogService->logTransfer(
-                TransferLogEntry::DownloadLog, task.fileName, task.filePath,
+            int logType = (task.type == TransferTask::Upload) ? TransferLogEntry::UploadLog : TransferLogEntry::DownloadLog;
+            m_transferLogService->logTransfer(logType, task.fileName, task.filePath,
                 task.fileSize, QString(), TransferLogEntry::Paused,
                 QString(), task.transferredSize, task.taskId);
         }
@@ -353,7 +421,21 @@ bool FileTransferEngine::pauseTask(const QString& taskId)
 bool FileTransferEngine::resumeTask(const QString& taskId)
 {
     if (m_tasks.contains(taskId)) {
-        m_tasks[taskId].status = TransferTask::Downloading;
+        m_tasks[taskId].status = (m_tasks[taskId].type == TransferTask::Upload) ? TransferTask::Uploading : TransferTask::Downloading;
+        m_tasks[taskId].error.clear();
+        m_lastProgressTime[taskId] = QDateTime::currentMSecsSinceEpoch();
+
+        if (m_uploadResumeCallback && m_tasks[taskId].type == TransferTask::Upload)
+            m_uploadResumeCallback(taskId);
+
+        if (m_transferLogService) {
+            const TransferTask& task = m_tasks[taskId];
+            int logType = (task.type == TransferTask::Upload) ? TransferLogEntry::UploadLog : TransferLogEntry::DownloadLog;
+            m_transferLogService->logTransfer(logType, task.fileName, task.filePath,
+                task.fileSize, QString(), TransferLogEntry::Started,
+                QString(), task.transferredSize, task.taskId);
+        }
+
         emit taskResumed(taskId);
         return true;
     }
@@ -363,8 +445,18 @@ bool FileTransferEngine::resumeTask(const QString& taskId)
 bool FileTransferEngine::cancelTask(const QString& taskId)
 {
     if (m_tasks.contains(taskId)) {
+        if (m_transferLogService) {
+            const TransferTask& task = m_tasks[taskId];
+            int logType = (task.type == TransferTask::Upload) ? TransferLogEntry::UploadLog : TransferLogEntry::DownloadLog;
+            m_transferLogService->logTransfer(logType, task.fileName, task.filePath,
+                task.fileSize, QString(), TransferLogEntry::Cancelled,
+                QString(), task.transferredSize, task.taskId);
+        }
+
         m_tasks[taskId].status = TransferTask::Cancelled;
         m_tasks[taskId].speed = 0;
+        m_speedHistory.remove(taskId);
+        m_lastProgressTime.remove(taskId);
         if (m_bandwidthManager) m_bandwidthManager->removeRecord(taskId);
         emit taskCancelled(taskId);
         m_tasks.remove(taskId);
@@ -373,13 +465,80 @@ bool FileTransferEngine::cancelTask(const QString& taskId)
     return false;
 }
 
+bool FileTransferEngine::deleteTask(const QString& taskId)
+{
+    QString fileName;
+    int taskType = -1;
+
+    if (m_tasks.contains(taskId)) {
+        fileName = m_tasks[taskId].fileName;
+        taskType = m_tasks[taskId].type;
+    }
+
+    if (m_transferLogService && (fileName.isEmpty() || taskType < 0)) {
+        QVariantList logs = m_transferLogService->queryLogs(500, 0);
+        for (const QVariant& v : logs) {
+            TransferLogEntry entry = v.value<TransferLogEntry>();
+            QString logTaskId = entry.taskId.isEmpty() ? entry.id : entry.taskId;
+            if (logTaskId == taskId) {
+                fileName = entry.fileName;
+                taskType = (entry.type == TransferLogEntry::UploadLog) ? TransferTask::Upload : TransferTask::Download;
+                break;
+            }
+        }
+    }
+
+    if (!fileName.isEmpty() && taskType >= 0) {
+        QStringList toRemove;
+        for (auto it = m_tasks.constBegin(); it != m_tasks.constEnd(); ++it) {
+            if (it.value().fileName == fileName && it.value().type == taskType) {
+                toRemove.append(it.key());
+            }
+        }
+        for (const QString& tid : toRemove) {
+            m_tasks.remove(tid);
+            m_speedHistory.remove(tid);
+            m_lastProgressTime.remove(tid);
+            if (m_bandwidthManager) m_bandwidthManager->removeRecord(tid);
+        }
+    } else {
+        m_tasks.remove(taskId);
+        m_speedHistory.remove(taskId);
+        m_lastProgressTime.remove(taskId);
+        if (m_bandwidthManager) m_bandwidthManager->removeRecord(taskId);
+    }
+
+    if (m_transferLogService) {
+        if (!fileName.isEmpty() && taskType >= 0) {
+            int logType = (taskType == TransferTask::Upload) ? TransferLogEntry::UploadLog : TransferLogEntry::DownloadLog;
+            m_transferLogService->deleteLogsByFileName(fileName, logType);
+        } else {
+            m_transferLogService->deleteLogByTaskId(taskId);
+        }
+    }
+
+    emit taskDeleted(taskId);
+    return true;
+}
+
 bool FileTransferEngine::failTask(const QString& taskId, const QString& error)
 {
     if (m_tasks.contains(taskId)) {
         m_tasks[taskId].status = TransferTask::Failed;
         m_tasks[taskId].error = error;
         m_tasks[taskId].speed = 0;
+        m_speedHistory.remove(taskId);
+        m_lastProgressTime.remove(taskId);
         if (m_bandwidthManager) m_bandwidthManager->removeRecord(taskId);
+
+        if (m_transferLogService) {
+            const TransferTask& task = m_tasks[taskId];
+            int logType = (task.type == TransferTask::Upload) ? TransferLogEntry::UploadLog : TransferLogEntry::DownloadLog;
+            m_transferLogService->logTransfer(logType, task.fileName, task.filePath,
+                task.fileSize, QString(), TransferLogEntry::Failed,
+                error, task.transferredSize, task.taskId);
+        }
+
         emit taskFailed(taskId, error);
         return true;
     }
@@ -440,6 +599,7 @@ void FileTransferEngine::addCompletedTask(const TransferTask& task)
 void FileTransferEngine::addUploadingTask(const TransferTask& task)
 {
     m_tasks[task.taskId] = task;
+    m_lastProgressTime[task.taskId] = QDateTime::currentMSecsSinceEpoch();
     emit taskStarted(task.taskId);
 }
 
@@ -447,18 +607,28 @@ void FileTransferEngine::updateTaskProgress(const QString& taskId, qint64 transf
 {
     if (!m_tasks.contains(taskId)) return;
     auto& t = m_tasks[taskId];
-    // Don't update progress on tasks that are no longer active
     if (t.status != TransferTask::Uploading && t.status != TransferTask::Downloading
         && t.status != TransferTask::Pending && t.status != TransferTask::Preparing) {
         return;
     }
-    qint64 delta = transferredSize - t.transferredSize;
-    if (delta > 0 && m_bandwidthManager) {
-        m_bandwidthManager->recordTransfer(taskId, static_cast<int>(delta));
+
+    qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+    m_lastProgressTime[taskId] = nowMs;
+    auto& history = m_speedHistory[taskId];
+    history.append({transferredSize, nowMs});
+    while (history.size() > 10) history.removeFirst();
+
+    int speed = 0;
+    if (history.size() >= 2) {
+        auto& oldest = history.first();
+        qint64 dt = nowMs - oldest.timeMs;
+        if (dt > 200) {
+            speed = static_cast<int>((transferredSize - oldest.bytes) * 1000 / dt);
+        }
     }
+
     t.transferredSize = transferredSize;
     t.progress = t.fileSize > 0 ? static_cast<int>((transferredSize * 100) / t.fileSize) : 0;
-    int speed = m_bandwidthManager ? m_bandwidthManager->currentSpeed(taskId) : 0;
     t.speed = speed;
     emit taskProgress(taskId, t.progress, speed);
 }
@@ -472,6 +642,8 @@ void FileTransferEngine::completeTask(const QString& taskId)
     t.progress = 100;
     t.speed = 0;
     t.completedAt = QDateTime::currentDateTime();
+    m_speedHistory.remove(taskId);
+    m_lastProgressTime.remove(taskId);
     if (m_bandwidthManager) m_bandwidthManager->removeRecord(taskId);
     emit taskCompleted(taskId);
 }
@@ -495,13 +667,12 @@ void FileTransferEngine::completeTaskByName(const QString& fileName, int type)
 
 void FileTransferEngine::removeFailedUploadTasksByName(const QString& fileName)
 {
-    // Remove failed upload tasks with the same fileName to avoid duplicates
-    // when retry creates a new task via /api/upload/check
     QStringList toRemove;
     for (auto it = m_tasks.constBegin(); it != m_tasks.constEnd(); ++it) {
         if (it.value().type == TransferTask::Upload
-            && it.value().status == TransferTask::Failed
-            && it.value().fileName == fileName) {
+            && it.value().fileName == fileName
+            && (it.value().status == TransferTask::Failed
+                || it.value().status == TransferTask::Uploading)) {
             toRemove.append(it.key());
         }
     }

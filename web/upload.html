@@ -198,6 +198,38 @@
         .btn-retry.active { display: block; }
         .btn-retry:hover { background: #ff6b81; }
 
+        .btn-pause {
+            width: 100%;
+            padding: 12px;
+            background: #ff9800;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 8px;
+            display: none;
+        }
+        .btn-pause.active { display: block; }
+        .btn-pause:hover { background: #ffb74d; }
+
+        .btn-resume {
+            width: 100%;
+            padding: 12px;
+            background: #4caf50;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 8px;
+            display: none;
+        }
+        .btn-resume.active { display: block; }
+        .btn-resume:hover { background: #66bb6a; }
+
         .ws-status {
             display: flex; align-items: center; justify-content: center;
             gap: 6px; font-size: 11px; color: var(--text-muted); margin-top: 8px;
@@ -244,6 +276,14 @@
                 开始上传
             </button>
 
+            <button class="btn-pause" id="pauseBtn" onclick="pauseUpload()">
+                暂停上传
+            </button>
+
+            <button class="btn-resume" id="resumeBtn" onclick="resumeUpload()">
+                继续上传
+            </button>
+
             <button class="btn-retry" id="retryBtn" onclick="retryFailed()">
                 重试失败文件
             </button>
@@ -281,13 +321,91 @@ const MAX_CONCURRENT = 3;
 // WebSocket for real-time progress (fallback for mobile browsers)
 let ws = null;
 let wsConnected = false;
+let uploadPaused = false;
+let pauseResolve = null;
 let xhrProgressActive = false; // Track if XHR progress events are firing
+let wsReconnectTimer = null;
+let wsReconnectDelay = 5000;
+let serverDisconnected = false;
+let disconnectStartTime = null;
+let disconnectNoticeTimer = null;
 
 // ===== WebSocket Connection =====
 
+function showDisconnectNotice(show, canRetry) {
+    let notice = document.getElementById('disconnectNotice');
+    if (show) {
+        if (!notice) {
+            notice = document.createElement('div');
+            notice.id = 'disconnectNotice';
+            notice.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#e94560;color:#fff;text-align:center;padding:10px 16px;font-size:14px;z-index:9999;display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;';
+            const textSpan = document.createElement('span');
+            textSpan.id = 'disconnectText';
+            textSpan.textContent = '服务器连接已断开，正在尝试重新连接...';
+            notice.appendChild(textSpan);
+
+            const retryBtnEl = document.createElement('button');
+            retryBtnEl.id = 'manualRetryBtn';
+            retryBtnEl.textContent = '手动重试';
+            retryBtnEl.style.cssText = 'background:#fff;color:#e94560;border:none;padding:4px 14px;border-radius:4px;cursor:pointer;font-size:13px;font-weight:600;display:none;';
+            retryBtnEl.onclick = () => {
+                if (wsReconnectTimer) clearTimeout(wsReconnectTimer);
+                wsReconnectDelay = 5000;
+                connectWebSocket();
+            };
+            notice.appendChild(retryBtnEl);
+
+            document.body.appendChild(notice);
+        }
+        const textEl = document.getElementById('disconnectText');
+        const retryBtnEl = document.getElementById('manualRetryBtn');
+        if (textEl) {
+            if (disconnectStartTime && (Date.now() - disconnectStartTime >= 60000)) {
+                textEl.textContent = '服务器连接已断开超过1分钟，请检查桌面端是否开启';
+            } else {
+                textEl.textContent = '服务器连接已断开，正在尝试重新连接...';
+            }
+        }
+        if (retryBtnEl) {
+            retryBtnEl.style.display = canRetry ? 'inline-block' : 'none';
+        }
+    } else if (notice) {
+        notice.remove();
+        disconnectStartTime = null;
+        if (disconnectNoticeTimer) {
+            clearInterval(disconnectNoticeTimer);
+            disconnectNoticeTimer = null;
+        }
+    }
+}
+
+function startDisconnectTimer() {
+    disconnectStartTime = Date.now();
+    if (disconnectNoticeTimer) clearInterval(disconnectNoticeTimer);
+    disconnectNoticeTimer = setInterval(() => {
+        if (!serverDisconnected) {
+            clearInterval(disconnectNoticeTimer);
+            disconnectNoticeTimer = null;
+            return;
+        }
+        const elapsed = Date.now() - disconnectStartTime;
+        if (elapsed >= 60000) {
+            showDisconnectNotice(true, true);
+        }
+    }, 5000);
+}
+
+async function checkServerAvailable() {
+    try {
+        const resp = await fetch('/api/shares', { method: 'GET', signal: AbortSignal.timeout(5000) });
+        return resp.ok;
+    } catch (e) {
+        return false;
+    }
+}
+
 function connectWebSocket() {
-    const wsPort = location.port ? parseInt(location.port) + 1 : 8081;
-    const wsUrl = 'ws://' + location.hostname + ':' + wsPort;
+    const wsUrl = 'ws://' + location.host + '/ws';
 
     // If already connected, re-subscribe with the current session ID
     if (ws && ws.readyState === WebSocket.OPEN) {
@@ -307,9 +425,50 @@ function connectWebSocket() {
 
     ws.onopen = () => {
         wsConnected = true;
+        serverDisconnected = false;
+        wsReconnectDelay = 5000;
         updateWsStatus(true);
+        showDisconnectNotice(false);
+
         if (uploadSessionId) {
             ws.send(JSON.stringify({ type: 'subscribe', data: { token: uploadSessionId } }));
+        }
+
+        if (uploadPaused && uploadSessionId) {
+            checkServerAvailable().then(available => {
+                if (!available) {
+                    serverDisconnected = true;
+                    showDisconnectNotice(true, true);
+                    document.getElementById('statusText').textContent = '服务器未就绪，等待重连...';
+                    return;
+                }
+                fetch('/api/upload/resume', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ sessionId: uploadSessionId })
+                }).then(resp => {
+                    if (!resp.ok) {
+                        serverDisconnected = true;
+                        showDisconnectNotice(true, true);
+                        document.getElementById('statusText').textContent = '恢复上传失败，等待重连...';
+                        return;
+                    }
+                    uploadPaused = false;
+                    const pauseBtn = document.getElementById('pauseBtn');
+                    const resumeBtn = document.getElementById('resumeBtn');
+                    if (pauseBtn) pauseBtn.classList.add('active');
+                    if (resumeBtn) resumeBtn.classList.remove('active');
+                    document.getElementById('statusText').textContent = '上传中...';
+                    if (pauseResolve) {
+                        pauseResolve();
+                        pauseResolve = null;
+                    }
+                }).catch(() => {
+                    serverDisconnected = true;
+                    showDisconnectNotice(true, true);
+                    document.getElementById('statusText').textContent = '恢复上传失败，等待重连...';
+                });
+            });
         }
     };
 
@@ -318,6 +477,24 @@ function connectWebSocket() {
             const msg = JSON.parse(e.data);
             if (msg.type === 'transfer_update' && msg.data) {
                 handleWsProgress(msg.data);
+            } else if (msg.type === 'pause_upload') {
+                uploadPaused = true;
+                const pauseBtn = document.getElementById('pauseBtn');
+                const resumeBtn = document.getElementById('resumeBtn');
+                if (pauseBtn) pauseBtn.classList.remove('active');
+                if (resumeBtn) resumeBtn.classList.add('active');
+                document.getElementById('statusText').textContent = '已暂停';
+            } else if (msg.type === 'resume_upload') {
+                uploadPaused = false;
+                const pauseBtn = document.getElementById('pauseBtn');
+                const resumeBtn = document.getElementById('resumeBtn');
+                if (pauseBtn) pauseBtn.classList.add('active');
+                if (resumeBtn) resumeBtn.classList.remove('active');
+                document.getElementById('statusText').textContent = '上传中...';
+                if (pauseResolve) {
+                    pauseResolve();
+                    pauseResolve = null;
+                }
             }
         } catch (ex) {}
     };
@@ -325,10 +502,19 @@ function connectWebSocket() {
     ws.onclose = () => {
         wsConnected = false;
         updateWsStatus(false);
-        // Auto reconnect after 5 seconds if upload is active
+
         const hasActive = Object.values(uploadStatus).some(s => s === 'uploading' || s === 'pending');
         if (hasActive) {
-            setTimeout(connectWebSocket, 5000);
+            serverDisconnected = true;
+            showDisconnectNotice(true, false);
+            startDisconnectTimer();
+            document.getElementById('statusText').textContent = '连接断开，等待重连...';
+
+            if (wsReconnectTimer) clearTimeout(wsReconnectTimer);
+            wsReconnectTimer = setTimeout(() => {
+                wsReconnectDelay = Math.min(wsReconnectDelay * 2, 60000);
+                connectWebSocket();
+            }, wsReconnectDelay);
         }
     };
 
@@ -520,6 +706,9 @@ async function startUpload() {
     uploadBtn.disabled = true;
     retryBtn.classList.remove('active');
     resumeHint.classList.remove('active');
+    uploadPaused = false;
+    document.getElementById('pauseBtn').classList.add('active');
+    document.getElementById('resumeBtn').classList.remove('active');
     uploadSessionId = '';
     updateProgress(0, selectedFiles.length, 0, totalUploadSize);
 
@@ -610,9 +799,13 @@ async function startUpload() {
 
     if (failCount > 0) {
         document.getElementById('statusText').textContent = failCount + ' 个文件上传失败';
+        document.getElementById('pauseBtn').classList.remove('active');
+        document.getElementById('resumeBtn').classList.remove('active');
         retryBtn.classList.add('active');
         uploadBtn.disabled = true;
     } else if (doneCount === selectedFiles.length) {
+        document.getElementById('pauseBtn').classList.remove('active');
+        document.getElementById('resumeBtn').classList.remove('active');
         await finalizeUpload();
     }
 }
@@ -625,13 +818,13 @@ async function uploadFilesConcurrent(files) {
 
     async function uploadNext() {
         while (nextIndex < files.length) {
+            await checkPause();
             const item = files[nextIndex++];
             uploadStatus[item.relativePath] = 'uploading';
 
             try {
                 await uploadSingleFile(item);
                 uploadStatus[item.relativePath] = 'done';
-                // Calculate actual new bytes transferred
                 const info = chunkInfo[item.relativePath];
                 if (info && info.useChunking) {
                     uploadedSize += item.file.size - (info.completedChunks.size * info.chunkSize);
@@ -641,6 +834,11 @@ async function uploadFilesConcurrent(files) {
                     uploadedSize += item.file.size;
                 }
             } catch (e) {
+                if (serverDisconnected) {
+                    nextIndex--;
+                    await checkPause();
+                    continue;
+                }
                 uploadStatus[item.relativePath] = 'failed';
                 failedFiles.push(item);
             }
@@ -690,6 +888,7 @@ function uploadFileChunked(item, info) {
 
     async function uploadNextChunk() {
         while (nextChunkIdx < pendingChunks.length) {
+            await checkPause();
             const chunkIndex = pendingChunks[nextChunkIdx++];
             const start = chunkIndex * chunkSize;
             const end = Math.min(start + chunkSize, fileSize);
@@ -736,8 +935,20 @@ function uploadFileChunked(item, info) {
                         reject(new Error('Chunk upload failed: ' + xhr.status));
                     }
                 };
-                xhr.onerror = () => reject(new Error('Network error'));
-                xhr.ontimeout = () => reject(new Error('Timeout'));
+                xhr.onerror = () => {
+                    serverDisconnected = true;
+                    showDisconnectNotice(true, true);
+                    startDisconnectTimer();
+                    document.getElementById('statusText').textContent = '连接断开，等待重连...';
+                    connectWebSocket();
+                    reject(new Error('Network error'));
+                };
+                xhr.ontimeout = () => {
+                    serverDisconnected = true;
+                    showDisconnectNotice(true, true);
+                    startDisconnectTimer();
+                    reject(new Error('Timeout'));
+                };
                 xhr.timeout = 0;
 
                 xhr.send(blob);
@@ -797,8 +1008,20 @@ function uploadSmallFile(item, info) {
                 reject(new Error('Upload failed: ' + xhr.status));
             }
         };
-        xhr.onerror = () => reject(new Error('Network error'));
-        xhr.ontimeout = () => reject(new Error('Timeout'));
+        xhr.onerror = () => {
+            serverDisconnected = true;
+            showDisconnectNotice(true, true);
+            startDisconnectTimer();
+            document.getElementById('statusText').textContent = '连接断开，等待重连...';
+            connectWebSocket();
+            reject(new Error('Network error'));
+        };
+        xhr.ontimeout = () => {
+            serverDisconnected = true;
+            showDisconnectNotice(true, true);
+            startDisconnectTimer();
+            reject(new Error('Timeout'));
+        };
         xhr.timeout = 0;
 
         xhr.send(formData);
@@ -811,6 +1034,91 @@ function updateProgress(doneCount, totalCount, doneSize, totalSize) {
     document.getElementById('progressText').textContent = pct + '% (' + doneCount + '/' + totalCount + ')';
     document.getElementById('statusText').textContent =
         '上传中... ' + formatSize(doneSize) + ' / ' + formatSize(totalSize);
+}
+
+function updateProgress(doneCount, total, uploaded, totalSize) {
+    const overall = Math.min(100, Math.round((uploaded / totalSize) * 100));
+    const fill = document.getElementById('progressFill');
+    if (fill) fill.style.width = overall + '%';
+    const pct = document.getElementById('progressText');
+    if (pct) pct.textContent = overall + '%';
+    const status = document.getElementById('statusText');
+    if (status) status.textContent = doneCount + '/' + total;
+}
+
+async function pauseUpload() {
+    if (!uploadSessionId) return;
+    uploadPaused = true;
+
+    const pauseBtn = document.getElementById('pauseBtn');
+    const resumeBtn = document.getElementById('resumeBtn');
+    if (pauseBtn) pauseBtn.classList.remove('active');
+    if (resumeBtn) resumeBtn.classList.add('active');
+
+    document.getElementById('statusText').textContent = '已暂停';
+
+    try {
+        await fetch('/api/upload/pause', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionId: uploadSessionId })
+        });
+    } catch (e) {}
+}
+
+async function resumeUpload() {
+    if (!uploadSessionId) return;
+
+    const available = await checkServerAvailable();
+    if (!available) {
+        serverDisconnected = true;
+        showDisconnectNotice(true, true);
+        startDisconnectTimer();
+        document.getElementById('statusText').textContent = '服务器未就绪，等待重连...';
+        return;
+    }
+
+    uploadPaused = false;
+
+    const pauseBtn = document.getElementById('pauseBtn');
+    const resumeBtn = document.getElementById('resumeBtn');
+    if (pauseBtn) pauseBtn.classList.add('active');
+    if (resumeBtn) resumeBtn.classList.remove('active');
+
+    document.getElementById('statusText').textContent = '上传中...';
+
+    try {
+        const resp = await fetch('/api/upload/resume', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionId: uploadSessionId })
+        });
+        if (!resp.ok) {
+            serverDisconnected = true;
+            showDisconnectNotice(true, true);
+            startDisconnectTimer();
+            document.getElementById('statusText').textContent = '恢复上传失败，等待重连...';
+            return;
+        }
+    } catch (e) {
+        serverDisconnected = true;
+        showDisconnectNotice(true, true);
+        startDisconnectTimer();
+        document.getElementById('statusText').textContent = '恢复上传失败，等待重连...';
+        return;
+    }
+
+    if (pauseResolve) {
+        pauseResolve();
+        pauseResolve = null;
+    }
+}
+
+function checkPause() {
+    if (!uploadPaused && !serverDisconnected) return Promise.resolve();
+    return new Promise(resolve => {
+        pauseResolve = resolve;
+    });
 }
 
 async function retryFailed() {

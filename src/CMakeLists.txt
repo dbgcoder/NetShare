@@ -10,6 +10,7 @@ qt_add_executable(NetShare ${APP_SOURCES})
 
 target_include_directories(NetShare PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/../third_party/boost-di
 )
 
 target_link_libraries(NetShare PRIVATE
@@ -27,7 +28,6 @@ target_link_libraries(NetShare PRIVATE
     Qt6::Quick
     Qt6::QuickControls2
     Qt6::Widgets
-    Qt6::WebSockets
 )
 
 if(WIN32)

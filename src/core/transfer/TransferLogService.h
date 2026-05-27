@@ -71,7 +71,11 @@ public:
     Q_INVOKABLE bool exportLogs(const QString& filePath) const;
     Q_INVOKABLE void clearLogs(int olderThanDays = 0);
 
+    Q_INVOKABLE bool deleteLogByTaskId(const QString& taskId);
+    Q_INVOKABLE int deleteLogsByFileName(const QString& fileName, int type);
+
     QVariantList pausedLogsForRestore() const;
+    QVariantList restorableLogs() const;
 
 signals:
     void logAdded(const QString& id);

@@ -207,6 +207,71 @@ void TransferLogService::clearLogs(int olderThanDays)
     LOG_INFO("TransferLogService: cleared %d logs older than %d days", removed, olderThanDays);
 }
 
+bool TransferLogService::deleteLogByTaskId(const QString& taskId)
+{
+    int removed = 0;
+    auto it = m_logs.begin();
+    while (it != m_logs.end()) {
+        if (it->taskId == taskId) {
+            it = m_logs.erase(it);
+            ++removed;
+        } else {
+            ++it;
+        }
+    }
+
+    if (m_database) {
+        QString sql = "DELETE FROM transfer_logs WHERE task_id = ?";
+        QVariantList args;
+        args << taskId;
+        m_database->execute(sql, args);
+    }
+
+    if (removed > 0) {
+        LOG_INFO("TransferLogService: deleted %d log entries for task %s", removed, qPrintable(taskId));
+    }
+    return removed > 0;
+}
+
+int TransferLogService::deleteLogsByFileName(const QString& fileName, int type)
+{
+    int removed = 0;
+    QStringList removedTaskIds;
+    auto it = m_logs.begin();
+    while (it != m_logs.end()) {
+        if (it->fileName == fileName && it->type == type) {
+            removedTaskIds.append(it->taskId);
+            it = m_logs.erase(it);
+            ++removed;
+        } else {
+            ++it;
+        }
+    }
+
+    if (m_database) {
+        if (!removedTaskIds.isEmpty()) {
+            for (const QString& tid : removedTaskIds) {
+                QString sql = "DELETE FROM transfer_logs WHERE task_id = ?";
+                QVariantList args;
+                args << tid;
+                m_database->execute(sql, args);
+            }
+        }
+
+        QString typeStr = (type == TransferLogEntry::UploadLog) ? "upload" : "download";
+        QString sql = "DELETE FROM transfer_logs WHERE file_name = ? AND type = ?";
+        QVariantList args;
+        args << fileName << typeStr;
+        m_database->execute(sql, args);
+    }
+
+    if (removed > 0) {
+        LOG_INFO("TransferLogService: deleted %d log entries from memory for fileName=%s type=%d",
+                 removed, qPrintable(fileName), type);
+    }
+    return removed;
+}
+
 QVariantList TransferLogService::pausedLogsForRestore() const
 {
     QVariantList result;
@@ -214,6 +279,24 @@ QVariantList TransferLogService::pausedLogsForRestore() const
         if (entry.status == TransferLogEntry::Paused) {
             result.append(QVariant::fromValue(entry));
         }
+    }
+    return result;
+}
+
+QVariantList TransferLogService::restorableLogs() const
+{
+    QMap<QString, TransferLogEntry> latest;
+    for (const TransferLogEntry& entry : m_logs) {
+        if (entry.status == TransferLogEntry::Paused || entry.status == TransferLogEntry::Started) {
+            const QString& key = entry.taskId.isEmpty() ? entry.id : entry.taskId;
+            if (!latest.contains(key) || entry.timestamp > latest[key].timestamp) {
+                latest[key] = entry;
+            }
+        }
+    }
+    QVariantList result;
+    for (const TransferLogEntry& entry : latest) {
+        result.append(QVariant::fromValue(entry));
     }
     return result;
 }

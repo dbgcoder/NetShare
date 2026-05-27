@@ -1,6 +1,6 @@
 # NetShare 架构改进执行文档
 
-> 最后更新：2026-04-28
+> 最后更新：2026-05-26
 > 状态标记：⏳待开始 | 🔄进行中 | ✅已完成 | ❌阻塞
 
 ---
@@ -194,7 +194,7 @@ main.cpp 和 test_sharemanager.cpp 中的 include 路径统一为子路径格式
 |------|--------|--------|
 | 持久化 | ShareManager 数据不落盘 | DB 持久化，重启恢复 |
 | 传输可靠性 | chunk 失败仍 merge | QAtomicInt 追踪，失败清理 |
-| 依赖管理 | 15+ 手动 new/delete | ServiceLocator 注入 |
+| 依赖管理 | 15+ 手动 new/delete | ServiceLocator → DiContainer (Boost.DI) 注入 |
 | 接口抽象 | 无 | IShareManager/IFileBrowser/IFolderPacker |
 | 单例模式 | 原始指针 + delete | Meyers singleton |
 | 错误处理 | 散落各处 | NetShareError + Result\<T\> |
@@ -203,3 +203,53 @@ main.cpp 和 test_sharemanager.cpp 中的 include 路径统一为子路径格式
 | 构建系统 | 零警告级别、脚本散落 | /W4、scripts/、Version.cmake |
 | 国际化 | 硬编码字符串 | tr()/qsTr() 提取 |
 | CMake 警告 | QML 策略未设置 | QTP0001-0005 全部 NEW |
+| HTTP 服务器 | 自研 HttpServer (QTcpSocket) | CivetWeb 嵌入式 Web 服务器 |
+| WebSocket | QWebSocketServer (独立端口) | CivetWeb 内建 WebSocket (同端口 /ws) |
+| TLS | 手动配置证书 | TlsCertificateGenerator 自动生成自签证书 |
+| DI 容器 | ServiceLocator (void*) | DiContainer (Boost.DI + std::any + 接口绑定) |
+| QML 加载 | 多级文件系统回退 | NETSHARE_QML_PATH 环境变量 → QML 模块 → qrc |
+
+---
+
+## 第四轮改进：CivetWeb 迁移 + Boost.DI + TLS 自动化 + QML 简化
+
+> 执行计划详见 [CIVETWEB_MIGRATION_PLAN.md](CIVETWEB_MIGRATION_PLAN.md)
+
+### 迁移概览
+
+| # | 内容 | 状态 | 关键变更 |
+|---|------|------|----------|
+| 1 | CivetWeb 集成 | ✅ | 替换自研 HttpServer，C++ 回调路由 |
+| 2 | 核心路由迁移 | ✅ | 静态页面、JSON API、CORS 统一处理 |
+| 3 | 流式上传/下载 | ✅ | mg_connection 流式读写，Session 超时清理 |
+| 4 | TLS + WebSocket | ✅ | 同端口 HTTP/WS/WSS，自动证书生成 |
+| 5 | main.cpp 精简 | ✅ | 移除 WebSocket 端口+1 逻辑 |
+| 6 | WebSocket 功能 | ✅ | subscribe/unsubscribe + broadcast + ping/pong 心跳 |
+| 7 | 清理与文档 | ✅ | 删除 HttpServer/WebSocketHandler，更新文档 |
+| 8 | TLS 自签证书 | ✅ | TlsCertificateGenerator (OpenSSL) |
+| 9 | Boost.DI 集成 | ✅ | DiContainer 替换 ServiceLocator，接口绑定 |
+| 10 | QML 加载简化 | ✅ | NETSHARE_QML_PATH 环境变量回退策略 |
+
+### 关键架构变更
+
+**HTTP 服务器**：自研 `HttpServer`（基于 `QTcpSocket`）→ `CivetWebServer`（基于 CivetWeb C 库）
+- 路由注册：`addRoute(method, path, handler)` 回调模式
+- 流式传输：`addStreamingRoute()` + `mg_read`/`mg_write`
+- CORS：`beginRequestHandler` 中统一添加响应头
+
+**WebSocket**：`QWebSocketServer`（独立端口 port+1）→ CivetWeb 内建 WebSocket（同端口 `/ws`）
+- 客户端管理：`subscribeClient`/`unsubscribeClient`/`broadcastToSubscribers`
+- 心跳：30s ping + 60s 超时断开
+- 前端连接：`ws://host:port/ws`（不再需要 port+1）
+
+**TLS 自动化**：`TlsCertificateGenerator` 使用 OpenSSL 命令行生成自签证书
+- 零配置：首次启用 TLS 时自动生成并存储
+- 路径：`QStandardPaths::AppConfigLocation/certs/`
+
+**依赖注入**：`ServiceLocator`（`void*` + `reinterpret_cast`）→ `DiContainer`（`std::any` + 接口绑定）
+- `bindAndRegister<Interface>(impl*)` — 接口到实现的双向注册
+- `registerInstance(ptr)` — 具体类型注册
+- `resolve<T>()` — 类型安全解析
+- `bind<Interface, Implementation>()` — 延迟绑定
+
+**QML 加载**：删除 `cdUp` 循环搜索 → `NETSHARE_QML_PATH` 环境变量 → `loadFromModule` → qrc

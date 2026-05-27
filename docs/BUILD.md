@@ -33,8 +33,15 @@
 
 | 组件 | 版本要求 | 说明 |
 |------|---------|------|
-| **OpenSSL** | 1.1.1+ | TLS/SSL 支持 |
+| **OpenSSL** | 1.1.1+ | TLS/SSL 支持（自动生成自签证书） |
 | **SQLite** | 3.x | 数据库 (Qt 自带) |
+
+### 内置第三方库
+
+| 库 | 说明 | 位置 |
+|----|------|------|
+| **CivetWeb** | 嵌入式 HTTP/HTTPS/WebSocket 服务器 | `third_party/civetweb_src/` |
+| **Boost.DI** | 编译期依赖注入框架 (header-only) | `third_party/boost-di/` |
 
 ---
 
@@ -55,7 +62,6 @@
      - Qt QML
      - Qt Quick
      - Qt SQL
-     - Qt WebSockets
 
 #### 2. 打开项目
 
@@ -130,7 +136,6 @@ $env:CMAKE_PREFIX_PATH = "$env:QTDIR\lib\cmake"
    ├── Qt Quick
    ├── Qt Quick Controls
    ├── Qt SQL
-   ├── Qt WebSockets
    └── Qt 6.8.3 Src (可选，查看源码)
 
    Tools
@@ -257,6 +262,23 @@ cmake --install .
 | `NETSHARE_ENABLE_TLS` | 启用 TLS 支持 | ON |
 | `NETSHARE_ENABLE_TESTS` | 启用单元测试 | ON |
 | `NETSHARE_ENABLE_DOCS` | 生成文档 | OFF |
+
+### 环境变量
+
+| 变量 | 说明 | 示例 |
+|------|------|------|
+| `NETSHARE_QML_PATH` | QML 入口文件路径覆盖（开发调试用） | `D:/qt6cmake/NetShare/src/gui/Main.qml` |
+
+开发时设置 `NETSHARE_QML_PATH` 可跳过 QML 模块编译，直接加载源码中的 QML 文件，方便热重载调试。
+
+```powershell
+$env:NETSHARE_QML_PATH = "D:\qt6cmake\NetShare\src\gui\Main.qml"
+```
+
+### CivetWeb 服务器
+
+NetShare 使用 CivetWeb 作为嵌入式 HTTP/HTTPS/WebSocket 服务器，源码位于 `third_party/civetweb_src/`。
+CMake 构建时自动编译，无需手动安装。HTTP 和 WebSocket 共用同一端口（默认 8080），WebSocket 端点为 `/ws`。
 
 ### 完整构建示例
 
@@ -394,6 +416,7 @@ NetShare/
 ├── Qt6Network.dll
 ├── Qt6Qml.dll
 ├── Qt6Quick.dll
+├── Qt6Sql.dll
 ├── platforms/                     # Qt 平台插件
 │   └── qwindows.dll
 ├── tls/                          # TLS 证书 (如启用)

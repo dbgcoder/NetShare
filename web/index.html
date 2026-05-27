@@ -297,8 +297,8 @@ function submitPassword() {
 }
 
 function connectWebSocket() {
-    const wsPort = location.port ? parseInt(location.port) + 1 : 8081;
-    const wsUrl = 'ws://' + location.hostname + ':' + wsPort;
+    const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = wsProto + '//' + location.host + '/ws';
     try {
         ws = new WebSocket(wsUrl);
         ws.onopen = () => {

@@ -11,6 +11,8 @@
 #include <QFutureWatcher>
 #include <QFile>
 #include <QNetworkAccessManager>
+#include <QTimer>
+#include <functional>
 
 #include "ShareManager.h"
 #include <QtQml/qqml.h>
@@ -104,6 +106,7 @@ public:
     Q_INVOKABLE bool pauseTask(const QString& taskId);
     Q_INVOKABLE bool resumeTask(const QString& taskId);
     Q_INVOKABLE bool cancelTask(const QString& taskId);
+    Q_INVOKABLE bool deleteTask(const QString& taskId);
     bool failTask(const QString& taskId, const QString& error);
 
     Q_INVOKABLE TransferTask getTaskInfo(const QString& taskId) const;
@@ -122,6 +125,8 @@ public:
 
     void setManagers(ShareManager* sm, ChunkManager* cm, ResumeManager* rm, BandwidthManager* bm);
     void setTransferLogService(TransferLogService* tls);
+    void setUploadPauseCallback(std::function<void(const QString& taskId)> cb);
+    void setUploadResumeCallback(std::function<void(const QString& taskId)> cb);
 
 private:
     void performDownload(const QString& taskId, const ShareInfo& info, const QString& savePath, int threads);
@@ -134,6 +139,7 @@ signals:
     void taskCancelled(const QString& taskId);
     void taskPaused(const QString& taskId);
     void taskResumed(const QString& taskId);
+    void taskDeleted(const QString& taskId);
 
 private:
     QMap<QString, TransferTask> m_tasks;
@@ -145,6 +151,16 @@ private:
     ResumeManager* m_resumeManager;
     BandwidthManager* m_bandwidthManager;
     TransferLogService* m_transferLogService = nullptr;
+    std::function<void(const QString&)> m_uploadPauseCallback;
+    std::function<void(const QString&)> m_uploadResumeCallback;
+
+    struct SpeedSample {
+        qint64 bytes = 0;
+        qint64 timeMs = 0;
+    };
+    QMap<QString, QList<SpeedSample>> m_speedHistory;
+    QMap<QString, qint64> m_lastProgressTime;
+    QTimer* m_speedCheckTimer;
 
     void onChunkFinished(const QString& taskId, int index, bool success);
 };

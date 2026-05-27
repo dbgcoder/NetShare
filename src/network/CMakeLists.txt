@@ -1,17 +1,30 @@
+set(BUILD_SHARED_LIBS OFF)
+cmake_policy(SET CMP0077 NEW)
+set(CIVETWEB_BUILD_TESTING OFF CACHE BOOL "Enable automated testing" FORCE)
+set(CIVETWEB_INSTALL_EXECUTABLE OFF CACHE BOOL "Enable installing CivetWeb executable" FORCE)
+set(CIVETWEB_ENABLE_SERVER_EXECUTABLE OFF CACHE BOOL "Enable building of server executable" FORCE)
+set(CIVETWEB_ENABLE_WEBSOCKETS ON CACHE BOOL "Enable websockets connections" FORCE)
+set(CIVETWEB_ENABLE_SSL ON CACHE BOOL "Enable SSL support" FORCE)
+set(CIVETWEB_ENABLE_CXX OFF)
+set(CIVETWEB_ENABLE_SSL_DYNAMIC_LOADING ON CACHE BOOL "Dynamically load SSL libraries" FORCE)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/civetweb_src civetweb_build)
+
+if(MSVC)
+    target_compile_options(civetweb-c-library PRIVATE /wd4244 /wd4189 /wd4267 /wd4996)
+endif()
+
 set(NETSHARE_NETWORK_SOURCES
-    HttpServer.cpp
+    CivetWebServer.cpp
     mDNSService.cpp
     RequestHandler.cpp
     StreamingMultipartParser.cpp
-    WebSocketHandler.cpp
 )
 
 set(NETSHARE_NETWORK_HEADERS
-    HttpServer.h
+    CivetWebServer.h
     mDNSService.h
     RequestHandler.h
     StreamingMultipartParser.h
-    WebSocketHandler.h
 )
 
 add_library(NetshareNetwork STATIC
@@ -33,8 +46,8 @@ target_include_directories(NetshareNetwork PUBLIC
 target_link_libraries(NetshareNetwork PUBLIC
     Qt6::Core
     Qt6::Network
-    Qt6::WebSockets
     NetshareCore
+    civetweb-c-library
 )
 
 set_target_properties(NetshareNetwork PROPERTIES
