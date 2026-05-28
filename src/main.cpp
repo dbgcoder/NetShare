@@ -31,7 +31,7 @@
 #include "core/share/FileBrowser.h"
 #include "core/share/FolderPacker.h"
 #include "core/transfer/ChunkManager.h"
-#include "core/transfer/ResumeManager.h"
+#include "core/transfer/ChunkStateManager.h"
 #include "core/transfer/BandwidthManager.h"
 #include "core/transfer/TransferLogService.h"
 #include "core/notification/NotificationManager.h"
@@ -255,14 +255,14 @@ private:
         m_chunkManager = new ChunkManager(this);
         LOG_INFO("ChunkManager initialized");
 
-        m_resumeManager = new ResumeManager(this);
-        LOG_INFO("ResumeManager initialized");
+        m_chunkStateManager = new ChunkStateManager(this);
+        LOG_INFO("ChunkStateManager initialized");
 
         m_bandwidthManager = new BandwidthManager(this);
         m_bandwidthManager->startMonitoring();
         LOG_INFO("BandwidthManager initialized");
 
-        m_transferEngine->setManagers(m_shareManager, m_chunkManager, m_resumeManager, m_bandwidthManager);
+        m_transferEngine->setManagers(m_shareManager, m_chunkManager, m_chunkStateManager, m_bandwidthManager);
 
         return true;
     }
@@ -278,6 +278,7 @@ private:
         requestHandler->setSettingsManager(m_settings);
 
         if (m_transferEngine) {
+            m_transferEngine->setUploadDir(uploadDir);
             requestHandler->setTransferEngine(m_transferEngine);
             m_transferEngine->setUploadPauseCallback([requestHandler](const QString& taskId) {
                 requestHandler->pauseUploadForTask(taskId);
@@ -431,6 +432,8 @@ private:
         qRegisterMetaType<ShareInfo>("ShareInfo");
         qRegisterMetaType<TransferTask>("TransferTask");
         qRegisterMetaType<FileEntry>("FileEntry");
+        qRegisterMetaType<ChunkState>("ChunkState");
+        qRegisterMetaType<ChunkStateInfo>("ChunkStateInfo");
 
         m_engine->rootContext()->setContextProperty("shareManager", m_shareManager);
         m_engine->rootContext()->setContextProperty("transferEngine", m_transferEngine);
@@ -438,7 +441,7 @@ private:
         m_engine->rootContext()->setContextProperty("fileBrowser", m_fileBrowser);
         m_engine->rootContext()->setContextProperty("folderPacker", m_folderPacker);
         m_engine->rootContext()->setContextProperty("chunkManager", m_chunkManager);
-        m_engine->rootContext()->setContextProperty("resumeManager", m_resumeManager);
+        m_engine->rootContext()->setContextProperty("chunkStateManager", m_chunkStateManager);
         m_engine->rootContext()->setContextProperty("bandwidthManager", m_bandwidthManager);
         m_engine->rootContext()->setContextProperty("transferLogService", m_transferLog);
         m_engine->rootContext()->setContextProperty("notificationManager", m_notificationManager);
@@ -674,7 +677,7 @@ private:
     FileBrowser*          m_fileBrowser      = nullptr;
     FolderPacker*         m_folderPacker     = nullptr;
     ChunkManager*         m_chunkManager     = nullptr;
-    ResumeManager*        m_resumeManager    = nullptr;
+    ChunkStateManager*    m_chunkStateManager = nullptr;
     BandwidthManager*     m_bandwidthManager = nullptr;
     CivetWebServer*       m_civetServer      = nullptr;
     mDNSService*          m_mdnsService      = nullptr;
@@ -688,7 +691,7 @@ private:
         m_injector = std::make_unique<NetShareInjector>(
             di::make_injector(
                 CoreModule(*m_shareManager, *m_fileBrowser, *m_folderPacker),
-                TransferModule(*m_transferEngine, *m_chunkManager, *m_resumeManager, *m_bandwidthManager),
+                TransferModule(*m_transferEngine, *m_chunkManager, *m_chunkStateManager, *m_bandwidthManager),
                 NetworkModule(*m_civetServer, *m_mdnsService, *m_notificationManager),
                 InfraModule(*m_database, *m_settings, *m_transferLog)
             )

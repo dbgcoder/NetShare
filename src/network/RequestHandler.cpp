@@ -5,6 +5,7 @@
 #include "FileTransferEngine.h"
 #include "StreamingMultipartParser.h"
 #include "ChunkManager.h"
+#include "ChunkStateManager.h"
 #include "TransferLogService.h"
 #include "SettingsManager.h"
 #include "Logger.h"
@@ -222,6 +223,10 @@ void RequestHandler::registerRoutes(CivetWebServer* server)
         return handleUploadSingleFile(conn, info);
     });
 
+    server->addRoute("GET", "/api/upload/pending", [this](mg_connection* conn, const HttpRequestInfo& info) {
+        return handleUploadPending(conn, info);
+    });
+
     server->addStreamingRoute("POST", "/upload/*", [this](mg_connection* conn, const HttpRequestInfo& info,
                                                           const QByteArray& chunk, bool isLast) {
         return handleStreamingUpload(conn, info, chunk, isLast);
@@ -244,6 +249,21 @@ void RequestHandler::registerRoutes(CivetWebServer* server)
         }
         if (m_streamingFileStates.contains(conn)) {
             auto* state = m_streamingFileStates[conn];
+            if (state->isChunked && !state->sessionId.isEmpty() && m_uploadSessions.contains(state->sessionId)) {
+                auto& session = m_uploadSessions[state->sessionId];
+                if (session.fileChunkStates.contains(state->filePath)) {
+                    auto& csi = session.fileChunkStates[state->filePath];
+                    if (state->chunkIndex >= 0 && state->chunkIndex < csi.chunks.size()) {
+                        csi.chunks[state->chunkIndex].status = QStringLiteral("partial");
+                        csi.chunks[state->chunkIndex].downloaded = state->bytesReceived;
+                    }
+                }
+                ChunkStateManager* csm = m_transferEngine ? m_transferEngine->chunkStateManager() : nullptr;
+                if (csm && state->chunkIndex >= 0) {
+                    QString stateFilePath = uploadDir() + "/.chunks/" + state->filePath + ".netshare";
+                    csm->updateChunkStatus(stateFilePath, state->chunkIndex, QStringLiteral("partial"), state->bytesReceived);
+                }
+            }
             if (state->chunkFile) { state->chunkFile->close(); delete state->chunkFile; }
             if (state->parser) delete state->parser;
             delete state;
@@ -565,19 +585,21 @@ int RequestHandler::handleStreamingFileUpload(mg_connection* conn, const HttpReq
                 CivetWebServer::sendJsonResponse(conn, 400, "{\"error\":\"File not found in upload session\"}");
                 return 400;
             }
-            auto& fcs = session.fileChunkStates[filePath];
-            if (chunkIndex < 0 || chunkIndex >= fcs.totalChunks) {
+            auto& csi = session.fileChunkStates[filePath];
+            if (chunkIndex < 0 || chunkIndex >= csi.totalChunks) {
                 delete state;
                 CivetWebServer::sendJsonResponse(conn, 400, "{\"error\":\"Invalid chunk index\"}");
                 return 400;
             }
-            if (fcs.chunks[chunkIndex].completed) {
+            if (csi.chunks[chunkIndex].status == QStringLiteral("completed")) {
                 delete state;
                 auto& s = m_uploadSessions[sessionId];
                 auto& fc = s.fileChunkStates[filePath];
+                int completedCount = 0;
+                for (const auto& c : fc.chunks) if (c.status == QStringLiteral("completed")) completedCount++;
                 CivetWebServer::sendJsonResponse(conn, 200,
                     QString("{\"success\":true,\"chunkIndex\":%1,\"completedChunks\":%2,\"skipped\":true}")
-                        .arg(chunkIndex).arg(fc.completedChunks).toUtf8());
+                        .arg(chunkIndex).arg(completedCount).toUtf8());
                 return 200;
             }
 
@@ -593,7 +615,7 @@ int RequestHandler::handleStreamingFileUpload(mg_connection* conn, const HttpReq
                 CivetWebServer::sendJsonResponse(conn, 500, "{\"error\":\"Failed to write chunk\"}");
                 return 500;
             }
-            state->expectedSize = fcs.chunks[chunkIndex].size;
+            state->expectedSize = csi.chunks[chunkIndex].size;
         } else {
             auto& session = m_uploadSessions[sessionId];
             QString dir = uploadDir();
@@ -607,9 +629,9 @@ int RequestHandler::handleStreamingFileUpload(mg_connection* conn, const HttpReq
                 return 400;
             }
             if (!filePath.isEmpty() && session.fileChunkStates.contains(filePath)) {
-                auto& fcs = session.fileChunkStates[filePath];
+                auto& csi = session.fileChunkStates[filePath];
                 QFileInfo fi(dir + "/" + filePath);
-                if (fi.exists() && fi.isFile() && fi.size() > 0 && fi.size() < fcs.fileSize) {
+                if (fi.exists() && fi.isFile() && fi.size() > 0 && fi.size() < csi.fileSize) {
                     state->parser->setResumeOffset(fi.size());
                     state->parser->setResumeFilePath(fi.absoluteFilePath());
                 }
@@ -649,10 +671,10 @@ int RequestHandler::handleStreamingFileUpload(mg_connection* conn, const HttpReq
             if (state->chunkFile) { state->chunkFile->close(); delete state->chunkFile; state->chunkFile = nullptr; }
 
             auto& session = m_uploadSessions[state->sessionId];
-            auto& fcs = session.fileChunkStates[state->filePath];
+            auto& csi = session.fileChunkStates[state->filePath];
             int chunkIndex = state->chunkIndex;
 
-            if (state->bytesReceived != state->expectedSize && chunkIndex < fcs.totalChunks - 1) {
+            if (state->bytesReceived != state->expectedSize && chunkIndex < csi.totalChunks - 1) {
                 CivetWebServer::sendJsonResponse(conn, 400,
                     QString("{\"error\":\"Chunk size mismatch: expected %1, got %2\"}")
                         .arg(state->expectedSize).arg(state->bytesReceived).toUtf8());
@@ -666,19 +688,28 @@ int RequestHandler::handleStreamingFileUpload(mg_connection* conn, const HttpReq
                 delete state; return 400;
             }
 
-            fcs.chunks[chunkIndex].completed = true;
-            fcs.completedChunks++;
+            csi.chunks[chunkIndex].status = QStringLiteral("completed");
             session.transferredSize += state->bytesReceived;
 
             if (m_transferEngine)
                 m_transferEngine->updateTaskProgress(session.taskId, session.transferredSize);
 
+            ChunkStateManager* csm = m_transferEngine ? m_transferEngine->chunkStateManager() : nullptr;
+            if (csm) {
+                QString stateFilePath = uploadDir() + "/.chunks/" + state->filePath + ".netshare";
+                qint64 chunkSize = (chunkIndex < csi.chunks.size()) ? csi.chunks[chunkIndex].size : 0;
+                csm->updateChunkStatus(stateFilePath, chunkIndex, QStringLiteral("completed"), chunkSize);
+            }
+
+            int completedCount = 0;
+            for (const auto& c : csi.chunks) if (c.status == QStringLiteral("completed")) completedCount++;
+
             LOG_INFO("Chunk upload complete: session=%s chunk=%d/%d",
-                     qPrintable(state->sessionId), chunkIndex, fcs.totalChunks);
+                     qPrintable(state->sessionId), chunkIndex, csi.totalChunks);
 
             CivetWebServer::sendJsonResponse(conn, 200,
                 QString("{\"success\":true,\"chunkIndex\":%1,\"completedChunks\":%2,\"totalChunks\":%3}")
-                    .arg(chunkIndex).arg(fcs.completedChunks).arg(fcs.totalChunks).toUtf8());
+                    .arg(chunkIndex).arg(completedCount).arg(csi.totalChunks).toUtf8());
 
         } else {
             auto& session = m_uploadSessions[state->sessionId];
@@ -700,9 +731,8 @@ int RequestHandler::handleStreamingFileUpload(mg_connection* conn, const HttpReq
             session.savedFiles.append(sfi);
 
             if (session.fileChunkStates.contains(state->filePath)) {
-                auto& fcs = session.fileChunkStates[state->filePath];
-                fcs.completedChunks = fcs.totalChunks;
-                for (auto& ci : fcs.chunks) ci.completed = true;
+                auto& csi = session.fileChunkStates[state->filePath];
+                for (auto& c : csi.chunks) c.status = QStringLiteral("completed");
             }
 
             if (m_transferEngine)
@@ -761,7 +791,8 @@ int RequestHandler::handleUploadCheck(mg_connection* conn, const HttpRequestInfo
     QJsonArray existingArr, partialArr;
     qint64 existingSize = 0, partialSize = 0;
     ChunkManager chunkMgr;
-    QMap<QString, FileChunkState> fileChunkStates;
+    QMap<QString, ChunkStateInfo> fileChunkStates;
+    ChunkStateManager* chunkStateMgr = m_transferEngine ? m_transferEngine->chunkStateManager() : nullptr;
 
     for (const QJsonValue& val : filesArr) {
         QJsonObject obj = val.toObject();
@@ -784,18 +815,21 @@ int RequestHandler::handleUploadCheck(mg_connection* conn, const HttpRequestInfo
             chunkCount = chunks.size();
         }
 
-        FileChunkState fcs;
-        fcs.relativePath = relativePath; fcs.fileSize = expectedSize;
-        fcs.chunkSize = chunkSize; fcs.totalChunks = chunkCount; fcs.useChunking = useChunking;
+        ChunkStateInfo csi;
+        csi.version = 1;
+        csi.fileName = relativePath;
+        csi.fileSize = expectedSize;
+        csi.chunkSize = chunkSize;
+        csi.totalChunks = chunkCount;
+        csi.status = QStringLiteral("uploading");
+        csi.type = QStringLiteral("upload");
 
         if (useChunking) {
             QVariantList chunks = chunkMgr.splitFile(expectedSize, chunkSize);
             for (const QVariant& v : chunks) {
-                ChunkInfo ci = v.value<ChunkInfo>();
-                ChunkUploadInfo cui;
-                cui.chunkIndex = ci.index; cui.offset = ci.offset;
-                cui.size = static_cast<qint64>(ci.size); cui.completed = false;
-                fcs.chunks.append(cui);
+                ChunkState ci = v.value<ChunkState>();
+                ci.status = QStringLiteral("pending");
+                csi.chunks.append(ci);
             }
         }
 
@@ -804,7 +838,7 @@ int RequestHandler::handleUploadCheck(mg_connection* conn, const HttpRequestInfo
             pa["useChunking"] = false; partialArr.append(pa); partialSize += fi.size();
         }
 
-        fileChunkStates[relativePath] = fcs;
+        fileChunkStates[relativePath] = csi;
     }
 
     if (!m_transferEngine) {
@@ -816,110 +850,136 @@ int RequestHandler::handleUploadCheck(mg_connection* conn, const HttpRequestInfo
     QString sessionId = QUuid::createUuid().toString();
     QString taskId = QUuid::createUuid().toString();
     QString chunkTempDir = dir + "/.chunks/" + sessionId;
+    QString chunksMetaDir = dir + "/.chunks";
+    bool sessionReused = false;
 
-    QString searchDir = dir + "/.chunks";
-    QDir searchDirObj(searchDir);
-    if (searchDirObj.exists()) {
-        QStringList sessionDirs = searchDirObj.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
-        for (const QString& prevSession : sessionDirs) {
-            if (m_uploadSessions.contains(prevSession)) continue;
-            QString prevSessionPath = searchDir + "/" + prevSession;
-            QFileInfo sessionInfo(prevSessionPath);
-            if (sessionInfo.lastModified().secsTo(QDateTime::currentDateTime()) > 86400) {
-                QDir(prevSessionPath).removeRecursively();
-            }
-        }
-
-        sessionDirs = searchDirObj.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
-        QSet<QString> requestedPaths;
+    if (chunkStateMgr) {
         for (auto it = fileChunkStates.begin(); it != fileChunkStates.end(); ++it) {
-            if (it.value().useChunking) requestedPaths.insert(it.key());
-        }
+            const QString& relativePath = it.key();
+            ChunkStateInfo& csi = it.value();
+            if (csi.totalChunks <= 0) continue;
 
-        QMap<QString, QMap<int, QString>> chunkSourceMap;
-        for (const QString& prevSession : sessionDirs) {
-            QString prevSessionPath = searchDir + "/" + prevSession;
-            QDir prevSessionDir(prevSessionPath);
-            QStringList fileDirs = prevSessionDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
-            for (const QString& fileDir : fileDirs) {
-                if (!requestedPaths.contains(fileDir)) continue;
-                QString prevChunkDir = prevSessionPath + "/" + fileDir;
-                QDir chunkDirObj(prevChunkDir);
-                QStringList chunkFiles = chunkDirObj.entryList(QDir::Files);
-                for (const QString& chunkFile : chunkFiles) {
-                    if (chunkFile.startsWith("chunk_")) {
-                        bool ok = false;
-                        int idx = chunkFile.mid(6).toInt(&ok);
-                        if (ok && !chunkSourceMap[fileDir].contains(idx))
-                            chunkSourceMap[fileDir][idx] = prevChunkDir + "/" + chunkFile;
+            QString stateFilePath = chunksMetaDir + "/" + relativePath + ".netshare";
+            ChunkStateInfo existingInfo;
+            if (chunkStateMgr->loadStateFile(stateFilePath, existingInfo)) {
+                if (existingInfo.fileSize == csi.fileSize && existingInfo.totalChunks == csi.totalChunks) {
+                    chunkStateMgr->validateCompletedChunks(stateFilePath);
+
+                    for (ChunkState& cs : existingInfo.chunks) {
+                        if (cs.status == QStringLiteral("partial") || cs.status == QStringLiteral("uploading")) {
+                            QString ckPath = existingInfo.chunkDir + QString("/chunk_%1").arg(cs.index, 6, 10, QChar('0'));
+                            QFileInfo fi(ckPath);
+                            if (fi.exists()) {
+                                QFile::remove(ckPath);
+                                LOG_INFO("[UploadCheck][chunk.discard] file=%s, chunk=%d",
+                                         qPrintable(relativePath), cs.index);
+                            }
+                            cs.status = QStringLiteral("pending");
+                            cs.downloaded = 0;
+                        }
                     }
+
+                    QString oldChunkDir = existingInfo.chunkDir;
+                    if (QDir(oldChunkDir).exists() && !sessionReused) {
+                        chunkTempDir = QFileInfo(oldChunkDir).absolutePath();
+                        sessionId = QFileInfo(chunkTempDir).fileName();
+                        sessionReused = true;
+                        LOG_INFO("[UploadCheck][chunkdir.reuse] file=%s, chunkDir=%s, sessionId=%s",
+                                 qPrintable(relativePath), qPrintable(oldChunkDir), qPrintable(sessionId));
+                    }
+
+                    existingInfo.taskId = taskId;
+                    existingInfo.status = QStringLiteral("uploading");
+                    existingInfo.lastUpdated = QDateTime::currentDateTime().toString(Qt::ISODate);
+                    if (!QDir(oldChunkDir).exists()) {
+                        existingInfo.chunkDir = chunkTempDir + "/" + relativePath;
+                    }
+                    chunkStateMgr->saveStateFile(stateFilePath, existingInfo);
+
+                    csi = existingInfo;
+                    csi.fileName = relativePath;
+
+                    QJsonObject pa;
+                    pa["path"] = relativePath; pa["size"] = csi.fileSize;
+                    pa["chunkSize"] = csi.chunkSize; pa["chunkCount"] = csi.totalChunks;
+                    pa["useChunking"] = true;
+                    QJsonArray completedArr; qint64 completedBytes = 0;
+                    for (const auto& chunk : csi.chunks) {
+                        if (chunk.status == QStringLiteral("completed")) {
+                            completedArr.append(chunk.index);
+                            completedBytes += chunk.size;
+                        }
+                    }
+                    pa["completedChunks"] = completedArr; pa["completedBytes"] = completedBytes;
+                    partialArr.append(pa); partialSize += completedBytes;
+                } else {
+                    chunkStateMgr->deleteStateFile(stateFilePath);
+                    if (!existingInfo.chunkDir.isEmpty() && QDir(existingInfo.chunkDir).exists()) {
+                        QDir(existingInfo.chunkDir).removeRecursively();
+                    }
+
+                    csi.taskId = taskId;
+                    csi.chunkDir = chunkTempDir + "/" + relativePath;
+                    csi.createdAt = QDateTime::currentDateTime().toString(Qt::ISODate);
+                    csi.lastUpdated = csi.createdAt;
+                    chunkStateMgr->createStateFile(stateFilePath, csi);
+
+                    QJsonObject pa;
+                    pa["path"] = relativePath; pa["size"] = csi.fileSize;
+                    pa["chunkSize"] = csi.chunkSize; pa["chunkCount"] = csi.totalChunks;
+                    pa["useChunking"] = true; pa["completedChunks"] = QJsonArray(); pa["completedBytes"] = 0;
+                    partialArr.append(pa);
                 }
-            }
-        }
+            } else {
+                csi.taskId = taskId;
+                csi.chunkDir = chunkTempDir + "/" + relativePath;
+                csi.createdAt = QDateTime::currentDateTime().toString(Qt::ISODate);
+                csi.lastUpdated = csi.createdAt;
+                chunkStateMgr->createStateFile(stateFilePath, csi);
 
-        for (auto it = fileChunkStates.begin(); it != fileChunkStates.end(); ++it) {
-            FileChunkState& fcs = it.value();
-            if (!fcs.useChunking) continue;
-            const QMap<int, QString>& availableChunks = chunkSourceMap[fcs.relativePath];
-
-            for (int i = 0; i < fcs.totalChunks; ++i) {
-                if (fcs.chunks[i].completed) continue;
-                if (!availableChunks.contains(i)) continue;
-                QFileInfo fi(availableChunks[i]);
-                if (fi.exists() && fi.size() == fcs.chunks[i].size) {
-                    fcs.chunks[i].completed = true; fcs.completedChunks++;
-                } else if (fi.exists()) {
-                    QFile::remove(availableChunks[i]);
-                }
-            }
-
-            if (fcs.completedChunks > 0) {
-                QString newChunkDir = chunkTempDir + "/" + fcs.relativePath;
-                QDir().mkpath(newChunkDir);
-                for (int i = 0; i < fcs.totalChunks; ++i) {
-                    if (!fcs.chunks[i].completed || !availableChunks.contains(i)) continue;
-                    QString srcPath = availableChunks[i];
-                    QString dstPath = newChunkDir + QString("/chunk_%1").arg(i, 6, 10, QChar('0'));
-                    QFile::rename(srcPath, dstPath);
-                }
-            }
-
-            QJsonObject pa;
-            pa["path"] = fcs.relativePath; pa["size"] = fcs.fileSize;
-            pa["chunkSize"] = fcs.chunkSize; pa["chunkCount"] = fcs.totalChunks;
-            pa["useChunking"] = true;
-            QJsonArray completedArr; qint64 completedBytes = 0;
-            for (const auto& chunk : fcs.chunks) {
-                if (chunk.completed) { completedArr.append(chunk.chunkIndex); completedBytes += chunk.size; }
-            }
-            pa["completedChunks"] = completedArr; pa["completedBytes"] = completedBytes;
-            partialArr.append(pa); partialSize += completedBytes;
-        }
-
-        for (const QString& prevSession : sessionDirs) {
-            if (m_uploadSessions.contains(prevSession)) continue;
-            QString prevSessionPath = searchDir + "/" + prevSession;
-            QDir prevDir(prevSessionPath);
-            QStringList subDirs = prevDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
-            for (const QString& sub : subDirs) {
-                QDir subDir(prevSessionPath + "/" + sub);
-                if (subDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot | QDir::Files).isEmpty()) {
-                    subDir.removeRecursively();
-                }
-            }
-            if (prevDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot | QDir::Files).isEmpty()) {
-                prevDir.removeRecursively();
+                QJsonObject pa;
+                pa["path"] = relativePath; pa["size"] = csi.fileSize;
+                pa["chunkSize"] = csi.chunkSize; pa["chunkCount"] = csi.totalChunks;
+                pa["useChunking"] = true; pa["completedChunks"] = QJsonArray(); pa["completedBytes"] = 0;
+                partialArr.append(pa);
             }
         }
     } else {
         for (auto it = fileChunkStates.begin(); it != fileChunkStates.end(); ++it) {
-            FileChunkState& fcs = it.value();
-            if (!fcs.useChunking) continue;
+            const QString& relativePath = it.key();
+            ChunkStateInfo& csi = it.value();
+            if (csi.totalChunks <= 0) continue;
             QJsonObject pa;
-            pa["path"] = fcs.relativePath; pa["size"] = fcs.fileSize;
-            pa["chunkSize"] = fcs.chunkSize; pa["chunkCount"] = fcs.totalChunks;
+            pa["path"] = relativePath; pa["size"] = csi.fileSize;
+            pa["chunkSize"] = csi.chunkSize; pa["chunkCount"] = csi.totalChunks;
             pa["useChunking"] = true; pa["completedChunks"] = QJsonArray(); pa["completedBytes"] = 0;
             partialArr.append(pa);
+        }
+    }
+
+    if (sessionReused) {
+        QDir chunksDir(chunksMetaDir);
+        if (chunksDir.exists()) {
+            QStringList cleanedDirs;
+            for (const QString& dirName : chunksDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
+                if (!dirName.startsWith('{')) continue;
+                QString dirPath = chunksMetaDir + "/" + dirName;
+                if (dirPath == chunkTempDir) continue;
+                bool inUse = false;
+                for (auto it = m_uploadSessions.constBegin(); it != m_uploadSessions.constEnd(); ++it) {
+                    if (it.value().chunkTempDir == dirPath) {
+                        inUse = true;
+                        break;
+                    }
+                }
+                if (!inUse) {
+                    QDir(dirPath).removeRecursively();
+                    cleanedDirs.append(dirName);
+                }
+            }
+            if (!cleanedDirs.isEmpty()) {
+                LOG_INFO("[UploadCheck][chunkdir.cleanup] removed=%s", qPrintable(cleanedDirs.join(", ")));
+            }
         }
     }
 
@@ -931,19 +991,33 @@ int RequestHandler::handleUploadCheck(mg_connection* conn, const HttpRequestInfo
         ? filesArr[0].toObject().value("path").toString()
         : QString("%1个文件").arg(filesArr.size());
 
-    m_transferEngine->removeFailedUploadTasksByName(taskFileName);
-
-    TransferTask task;
-    task.taskId = taskId; task.type = TransferTask::Upload; task.status = TransferTask::Uploading;
-    if (isFolder && !folderRoot.isEmpty()) {
-        task.fileName = folderRoot; task.filePath = dir + "/" + folderRoot;
+    QString pausedTaskId = m_transferEngine->findUploadTaskByName(taskFileName);
+    if (!pausedTaskId.isEmpty()) {
+        m_transferEngine->resumeTask(pausedTaskId);
+        m_transferEngine->updateTaskProgress(pausedTaskId, initialTransferredSize);
+        taskId = pausedTaskId;
+        LOG_INFO("[UploadCheck][task.resume] file=%s, taskId=%s, transferredSize=%lld",
+                 qPrintable(taskFileName), qPrintable(pausedTaskId), initialTransferredSize);
     } else {
-        task.fileName = taskFileName; task.filePath = dir;
+        m_transferEngine->removeFailedUploadTasksByName(taskFileName);
+        for (const QJsonValue& val : filesArr) {
+            QString relPath = val.toObject().value("path").toString();
+            m_transferEngine->removeFailedUploadTasksByName(relPath);
+        }
+
+        TransferTask task;
+        task.taskId = taskId; task.type = TransferTask::Upload; task.status = TransferTask::Uploading;
+        if (isFolder && !folderRoot.isEmpty()) {
+            task.fileName = folderRoot; task.filePath = dir + "/" + folderRoot;
+        } else {
+            task.fileName = taskFileName; task.filePath = dir;
+        }
+        task.fileSize = totalSize; task.transferredSize = initialTransferredSize;
+        task.progress = totalSize > 0 ? static_cast<int>((initialTransferredSize * 100) / totalSize) : 0;
+        task.startedAt = QDateTime::currentDateTime();
+        m_transferEngine->addUploadingTask(task);
+        LOG_INFO("[UploadCheck][task.create] file=%s, taskId=%s", qPrintable(taskFileName), qPrintable(taskId));
     }
-    task.fileSize = totalSize; task.transferredSize = initialTransferredSize;
-    task.progress = totalSize > 0 ? static_cast<int>((initialTransferredSize * 100) / totalSize) : 0;
-    task.startedAt = QDateTime::currentDateTime();
-    m_transferEngine->addUploadingTask(task);
 
     UploadSession session;
     session.sessionId = sessionId; session.taskId = taskId; session.folder = folderRoot;
@@ -951,6 +1025,7 @@ int RequestHandler::handleUploadCheck(mg_connection* conn, const HttpRequestInfo
     session.fileCount = filesArr.size(); session.remoteAddress = info.remoteAddress;
     session.createdAt = QDateTime::currentDateTime();
     session.fileChunkStates = fileChunkStates; session.chunkTempDir = chunkTempDir;
+    session.paused = false;
     m_uploadSessions[sessionId] = session;
     m_taskToToken[taskId] = sessionId;
 
@@ -972,11 +1047,39 @@ int RequestHandler::handleUploadSingleFile(mg_connection* conn, const HttpReques
     QString chunkIndexStr = info.headers.value("X-Chunk-Index");
 
     if (sessionId.isEmpty() || !m_uploadSessions.contains(sessionId)) {
+        if (!filePath.isEmpty()) {
+            QString stateFilePath = m_uploadDir + "/.chunks/" + filePath + ".netshare";
+            ChunkStateManager* csm = m_transferEngine ? m_transferEngine->chunkStateManager() : nullptr;
+            bool stateFileExists = false;
+            if (csm) {
+                ChunkStateInfo dummy;
+                stateFileExists = csm->loadStateFile(stateFilePath, dummy);
+            } else {
+                stateFileExists = QFile::exists(stateFilePath);
+            }
+            if (stateFileExists) {
+                LOG_INFO("[UploadSingle][410] sessionId=%s, filePath=%s, stateFile=%s, recheck_required",
+                         qPrintable(sessionId), qPrintable(filePath), qPrintable(stateFilePath));
+                CivetWebServer::sendJsonResponse(conn, 410,
+                    QString("{\"error\":\"session_expired\",\"hint\":\"recheck_required\"}").toUtf8());
+                return 410;
+            } else {
+                LOG_INFO("[UploadSingle][400] sessionId=%s, filePath=%s, no state file",
+                         qPrintable(sessionId), qPrintable(filePath));
+                CivetWebServer::sendJsonResponse(conn, 400, "{\"error\":\"Invalid or expired upload session\"}");
+                return 400;
+            }
+        }
         CivetWebServer::sendJsonResponse(conn, 400, "{\"error\":\"Invalid or expired upload session\"}");
         return 400;
     }
 
     auto& session = m_uploadSessions[sessionId];
+
+    if (session.paused) {
+        CivetWebServer::sendJsonResponse(conn, 409, "{\"error\":\"Upload session is paused\"}");
+        return 409;
+    }
 
     if (!chunkIndexStr.isEmpty()) {
         int chunkIndex = chunkIndexStr.toInt();
@@ -984,24 +1087,26 @@ int RequestHandler::handleUploadSingleFile(mg_connection* conn, const HttpReques
             CivetWebServer::sendJsonResponse(conn, 400, "{\"error\":\"File not found in upload session\"}");
             return 400;
         }
-        auto& fcs = session.fileChunkStates[filePath];
-        if (chunkIndex < 0 || chunkIndex >= fcs.totalChunks) {
+        auto& csi = session.fileChunkStates[filePath];
+        if (chunkIndex < 0 || chunkIndex >= csi.totalChunks) {
             CivetWebServer::sendJsonResponse(conn, 400, "{\"error\":\"Invalid chunk index\"}");
             return 400;
         }
-        if (fcs.chunks[chunkIndex].completed) {
+        if (csi.chunks[chunkIndex].status == QStringLiteral("completed")) {
+            int completedCount = 0;
+            for (const auto& c : csi.chunks) if (c.status == QStringLiteral("completed")) completedCount++;
             CivetWebServer::sendJsonResponse(conn, 200,
                 QString("{\"success\":true,\"chunkIndex\":%1,\"completedChunks\":%2,\"skipped\":true}")
-                    .arg(chunkIndex).arg(fcs.completedChunks).toUtf8());
+                    .arg(chunkIndex).arg(completedCount).toUtf8());
             return 200;
         }
 
         QString chunkDir = session.chunkTempDir + "/" + filePath;
         QDir().mkpath(chunkDir);
         ChunkManager chunkMgr;
-        qint64 expectedChunkSize = fcs.chunks[chunkIndex].size;
+        qint64 expectedChunkSize = csi.chunks[chunkIndex].size;
 
-        if (info.body.size() != expectedChunkSize && chunkIndex < fcs.totalChunks - 1) {
+        if (info.body.size() != expectedChunkSize && chunkIndex < csi.totalChunks - 1) {
             CivetWebServer::sendJsonResponse(conn, 400,
                 QString("{\"error\":\"Chunk size mismatch: expected %1, got %2\"}")
                     .arg(expectedChunkSize).arg(info.body.size()).toUtf8());
@@ -1017,19 +1122,29 @@ int RequestHandler::handleUploadSingleFile(mg_connection* conn, const HttpReques
             return 400;
         }
 
-        fcs.chunks[chunkIndex].completed = true; fcs.completedChunks++;
+        csi.chunks[chunkIndex].status = QStringLiteral("completed");
         session.transferredSize += info.body.size();
 
         if (m_transferEngine)
             m_transferEngine->updateTaskProgress(session.taskId, session.transferredSize);
 
+        ChunkStateManager* csm = m_transferEngine ? m_transferEngine->chunkStateManager() : nullptr;
+        if (csm) {
+            QString stateFilePath = uploadDir() + "/.chunks/" + filePath + ".netshare";
+            qint64 chunkSize = (chunkIndex < csi.chunks.size()) ? csi.chunks[chunkIndex].size : 0;
+            csm->updateChunkStatus(stateFilePath, chunkIndex, QStringLiteral("completed"), chunkSize);
+        }
+
+        int completedCount = 0;
+        for (const auto& c : csi.chunks) if (c.status == QStringLiteral("completed")) completedCount++;
+
         LOG_INFO("Chunk upload: session=%s, file=%s, chunk=%d/%d, size=%lld",
-                 qPrintable(sessionId), qPrintable(filePath), chunkIndex, fcs.totalChunks,
+                 qPrintable(sessionId), qPrintable(filePath), chunkIndex, csi.totalChunks,
                  static_cast<qint64>(info.body.size()));
 
         CivetWebServer::sendJsonResponse(conn, 200,
             QString("{\"success\":true,\"chunkIndex\":%1,\"completedChunks\":%2,\"totalChunks\":%3}")
-                .arg(chunkIndex).arg(fcs.completedChunks).arg(fcs.totalChunks).toUtf8());
+                .arg(chunkIndex).arg(completedCount).arg(csi.totalChunks).toUtf8());
     } else {
         QString contentType = info.headers.value("Content-Type");
         QList<UploadedFile> files = parseMultipartFormData(info.body, contentType);
@@ -1048,9 +1163,9 @@ int RequestHandler::handleUploadSingleFile(mg_connection* conn, const HttpReques
         QIODevice::OpenMode openMode = QIODevice::WriteOnly;
         qint64 existingSize = 0;
         if (session.fileChunkStates.contains(saveFileName)) {
-            auto& fcs = session.fileChunkStates[saveFileName];
+            auto& csi = session.fileChunkStates[saveFileName];
             QFileInfo fi(fullPath);
-            if (fi.exists() && fi.isFile() && fi.size() > 0 && fi.size() < fcs.fileSize) {
+            if (fi.exists() && fi.isFile() && fi.size() > 0 && fi.size() < csi.fileSize) {
                 existingSize = fi.size(); openMode = QIODevice::WriteOnly | QIODevice::Append;
             }
         }
@@ -1071,9 +1186,8 @@ int RequestHandler::handleUploadSingleFile(mg_connection* conn, const HttpReques
         session.savedFiles.append(sfi);
 
         if (session.fileChunkStates.contains(filePath)) {
-            auto& fcs = session.fileChunkStates[filePath];
-            fcs.completedChunks = fcs.totalChunks;
-            for (auto& ci : fcs.chunks) ci.completed = true;
+            auto& csi = session.fileChunkStates[filePath];
+            for (auto& c : csi.chunks) c.status = QStringLiteral("completed");
         }
 
         if (m_transferEngine)
@@ -1142,12 +1256,25 @@ int RequestHandler::handleUploadFinalize(mg_connection* conn, const HttpRequestI
         m_taskToToken.remove(session.taskId);
         m_taskToShareToken.remove(session.taskId);
 
+        ChunkStateManager* csm = m_transferEngine ? m_transferEngine->chunkStateManager() : nullptr;
+        if (csm) {
+            QString uploadBaseDir = uploadDir();
+            if (uploadBaseDir.isEmpty()) uploadBaseDir = QDir::tempPath() + "/netshare_uploads";
+            for (auto it = session.fileChunkStates.constBegin(); it != session.fileChunkStates.constEnd(); ++it) {
+                if (it.value().totalChunks <= 0) continue;
+                QString stateFilePath = uploadBaseDir + "/.chunks/" + it.key() + ".netshare";
+                csm->deleteStateFile(stateFilePath);
+            }
+        }
+
         QStringList incompleteFiles;
         for (auto it = session.fileChunkStates.begin(); it != session.fileChunkStates.end(); ++it) {
-            const FileChunkState& fcs = it.value();
-            if (fcs.useChunking && fcs.completedChunks < fcs.totalChunks)
-                incompleteFiles << QString("%1 (%2/%3)").arg(fcs.relativePath)
-                    .arg(fcs.completedChunks).arg(fcs.totalChunks);
+            const ChunkStateInfo& csi = it.value();
+            int completedCount = 0;
+            for (const auto& c : csi.chunks) if (c.status == QStringLiteral("completed")) completedCount++;
+            if (csi.totalChunks > 0 && completedCount < csi.totalChunks)
+                incompleteFiles << QString("%1 (%2/%3)").arg(csi.fileName)
+                    .arg(completedCount).arg(csi.totalChunks);
         }
         if (!incompleteFiles.isEmpty()) {
             LOG_WARN("Finalize: incomplete chunks: %s", qPrintable(incompleteFiles.join(", ")));
@@ -1155,7 +1282,7 @@ int RequestHandler::handleUploadFinalize(mg_connection* conn, const HttpRequestI
         }
 
         QString chunkTempDir = session.chunkTempDir;
-        QList<FileChunkState> fileStates;
+        QList<ChunkStateInfo> fileStates;
         for (auto it = session.fileChunkStates.begin(); it != session.fileChunkStates.end(); ++it) {
             fileStates.append(it.value());
         }
@@ -1166,28 +1293,28 @@ int RequestHandler::handleUploadFinalize(mg_connection* conn, const HttpRequestI
             ChunkManager chunkMgr;
             QList<SavedFileInfo> savedFiles;
 
-            for (const auto& fcs : fileStates) {
-                if (fcs.useChunking) {
-                    QString chunkDir = chunkTempDir + "/" + fcs.relativePath;
-                    QString outputPath = dir + "/" + fcs.relativePath;
+            for (const auto& csi : fileStates) {
+                if (csi.totalChunks > 0) {
+                    QString chunkDir = chunkTempDir + "/" + csi.fileName;
+                    QString outputPath = dir + "/" + csi.fileName;
                     QDir().mkpath(QFileInfo(outputPath).absolutePath());
-                    if (!chunkMgr.mergeChunks(chunkDir, outputPath, fcs.totalChunks)) {
-                        LOG_ERROR("Finalize: merge failed for %s", qPrintable(fcs.relativePath)); continue;
+                    if (!chunkMgr.mergeChunks(chunkDir, outputPath, csi.totalChunks)) {
+                        LOG_ERROR("Finalize: merge failed for %s", qPrintable(csi.fileName)); continue;
                     }
-                    if (!chunkMgr.verifyMergedFile(outputPath, fcs.fileSize)) {
-                        LOG_ERROR("Finalize: verify failed for %s", qPrintable(fcs.relativePath)); continue;
+                    if (!chunkMgr.verifyMergedFile(outputPath, csi.fileSize)) {
+                        LOG_ERROR("Finalize: verify failed for %s", qPrintable(csi.fileName)); continue;
                     }
                     chunkMgr.cleanupChunks(chunkDir);
                     SavedFileInfo sfi;
-                    sfi.fileName = QFileInfo(fcs.relativePath).fileName();
-                    sfi.savePath = outputPath; sfi.fileSize = fcs.fileSize;
+                    sfi.fileName = QFileInfo(csi.fileName).fileName();
+                    sfi.savePath = outputPath; sfi.fileSize = csi.fileSize;
                     savedFiles.append(sfi);
                 } else {
-                    QString existingPath = dir + "/" + fcs.relativePath;
+                    QString existingPath = dir + "/" + csi.fileName;
                     QFileInfo fi(existingPath);
                     if (fi.exists() && fi.isFile() && fi.size() > 0) {
                         SavedFileInfo sfi;
-                        sfi.fileName = QFileInfo(fcs.relativePath).fileName();
+                        sfi.fileName = QFileInfo(csi.fileName).fileName();
                         sfi.savePath = existingPath;
                         sfi.fileSize = fi.size();
                         savedFiles.append(sfi);
@@ -1267,6 +1394,17 @@ int RequestHandler::handleUploadAbort(mg_connection* conn, const HttpRequestInfo
     if (m_transferEngine && !taskId.isEmpty())
         m_transferEngine->failTask(taskId, "Upload aborted");
 
+    ChunkStateManager* csm = m_transferEngine ? m_transferEngine->chunkStateManager() : nullptr;
+    if (csm) {
+        QString dir = uploadDir();
+        if (dir.isEmpty()) dir = QDir::tempPath() + "/netshare_uploads";
+        for (auto it = session.fileChunkStates.constBegin(); it != session.fileChunkStates.constEnd(); ++it) {
+            if (it.value().totalChunks <= 0) continue;
+            QString stateFilePath = dir + "/.chunks/" + it.key() + ".netshare";
+            csm->deleteStateFile(stateFilePath);
+        }
+    }
+
     if (!session.chunkTempDir.isEmpty())
         QDir(session.chunkTempDir).removeRecursively();
 
@@ -1295,6 +1433,19 @@ int RequestHandler::handleUploadPause(mg_connection* conn, const HttpRequestInfo
 
     if (m_transferEngine && !session.taskId.isEmpty())
         m_transferEngine->pauseTask(session.taskId);
+
+    ChunkStateManager* csm = m_transferEngine ? m_transferEngine->chunkStateManager() : nullptr;
+    if (csm) {
+        QString dir = uploadDir();
+        if (dir.isEmpty()) dir = QDir::tempPath() + "/netshare_uploads";
+        for (auto it = session.fileChunkStates.constBegin(); it != session.fileChunkStates.constEnd(); ++it) {
+            if (it.value().totalChunks <= 0) continue;
+            QString stateFilePath = dir + "/.chunks/" + it.key() + ".netshare";
+            if (QFile::exists(stateFilePath)) {
+                csm->markDownloadingChunksPartial(stateFilePath);
+            }
+        }
+    }
 
     if (m_civetServer) {
         QJsonObject data;
@@ -1330,6 +1481,19 @@ int RequestHandler::handleUploadResume(mg_connection* conn, const HttpRequestInf
     if (m_transferEngine && !session.taskId.isEmpty())
         m_transferEngine->resumeTask(session.taskId);
 
+    ChunkStateManager* csm = m_transferEngine ? m_transferEngine->chunkStateManager() : nullptr;
+    if (csm) {
+        QString dir = uploadDir();
+        if (dir.isEmpty()) dir = QDir::tempPath() + "/netshare_uploads";
+        for (auto it = session.fileChunkStates.constBegin(); it != session.fileChunkStates.constEnd(); ++it) {
+            if (it.value().totalChunks <= 0) continue;
+            QString stateFilePath = dir + "/.chunks/" + it.key() + ".netshare";
+            if (QFile::exists(stateFilePath)) {
+                csm->updateTaskStatus(stateFilePath, QStringLiteral("uploading"));
+            }
+        }
+    }
+
     if (m_civetServer) {
         QJsonObject data;
         data["taskId"] = session.taskId;
@@ -1345,6 +1509,48 @@ int RequestHandler::handleUploadResume(mg_connection* conn, const HttpRequestInf
 
     LOG_INFO("Upload resumed: session=%s", qPrintable(sessionId));
     CivetWebServer::sendJsonResponse(conn, 200, "{\"success\":true}");
+    return 200;
+}
+
+int RequestHandler::handleUploadPending(mg_connection* conn, const HttpRequestInfo& info)
+{
+    ChunkStateManager* csm = m_transferEngine ? m_transferEngine->chunkStateManager() : nullptr;
+    if (!csm) {
+        CivetWebServer::sendJsonResponse(conn, 200, "{\"partial\":[]}");
+        return 200;
+    }
+
+    QString dir = uploadDir();
+    if (dir.isEmpty()) dir = QDir::tempPath() + "/netshare_uploads";
+    QString uploadChunksDir = dir + "/.chunks";
+
+    QList<ChunkStateInfo> resumable = csm->scanResumableTasks(uploadChunksDir);
+
+    QJsonArray partialArr;
+    for (const ChunkStateInfo& csi : resumable) {
+        if (csi.type != QStringLiteral("upload")) continue;
+        QJsonObject pa;
+        pa["path"] = csi.fileName;
+        pa["size"] = csi.fileSize;
+        pa["chunkSize"] = csi.chunkSize;
+        pa["chunkCount"] = csi.totalChunks;
+        pa["useChunking"] = true;
+        QJsonArray completedArr;
+        qint64 completedBytes = 0;
+        for (const ChunkState& chunk : csi.chunks) {
+            if (chunk.status == QStringLiteral("completed")) {
+                completedArr.append(chunk.index);
+                completedBytes += chunk.size;
+            }
+        }
+        pa["completedChunks"] = completedArr;
+        pa["completedBytes"] = completedBytes;
+        partialArr.append(pa);
+    }
+
+    QJsonObject result;
+    result["partial"] = partialArr;
+    CivetWebServer::sendJsonResponse(conn, 200, QJsonDocument(result).toJson(QJsonDocument::Compact));
     return 200;
 }
 
@@ -1364,6 +1570,17 @@ void RequestHandler::cleanupExpiredSessions()
 
         if (m_transferEngine && !taskId.isEmpty())
             m_transferEngine->failTask(taskId, "Session expired");
+
+        ChunkStateManager* csm = m_transferEngine ? m_transferEngine->chunkStateManager() : nullptr;
+        if (csm) {
+            QString dir = uploadDir();
+            if (dir.isEmpty()) dir = QDir::tempPath() + "/netshare_uploads";
+            for (auto it = session.fileChunkStates.constBegin(); it != session.fileChunkStates.constEnd(); ++it) {
+                if (it.value().totalChunks <= 0) continue;
+                QString stateFilePath = dir + "/.chunks/" + it.key() + ".netshare";
+                csm->deleteStateFile(stateFilePath);
+            }
+        }
 
         if (!session.chunkTempDir.isEmpty())
             QDir(session.chunkTempDir).removeRecursively();

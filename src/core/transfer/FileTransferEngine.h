@@ -18,7 +18,7 @@
 #include <QtQml/qqml.h>
 
 class ChunkManager;
-class ResumeManager;
+class ChunkStateManager;
 class BandwidthManager;
 class TransferLogService;
 
@@ -26,13 +26,16 @@ class TransferWorker : public QObject
 {
     Q_OBJECT
 public:
-    explicit TransferWorker(const QString& url, qint64 offset, qint64 length, 
-                            const QString& chunkPath, QObject* parent = nullptr);
+    explicit TransferWorker(const QString& url, qint64 offset, qint64 length,
+                            const QString& chunkPath, int chunkIndex = 0,
+                            QObject* parent = nullptr);
     void start();
+    void setResumeOffset(qint64 offset);
 
 signals:
+    void chunkStarted(int index);
     void chunkFinished(int index, bool success);
-    void chunkProgress(qint64 bytesTransferred);
+    void chunkProgress(int index, qint64 bytesTransferred);
 
 private slots:
     void onDownloadFinished();
@@ -43,6 +46,8 @@ private:
     qint64 m_offset;
     qint64 m_length;
     QString m_chunkPath;
+    int m_chunkIndex = 0;
+    qint64 m_resumeOffset = 0;
     QFile* m_file = nullptr;
     QNetworkAccessManager* m_networkManager = nullptr;
 };
@@ -122,9 +127,13 @@ public:
     void completeTask(const QString& taskId);
     void completeTaskByName(const QString& fileName, int type);
     void removeFailedUploadTasksByName(const QString& fileName);
+    QString findUploadTaskByName(const QString& fileName) const;
 
-    void setManagers(ShareManager* sm, ChunkManager* cm, ResumeManager* rm, BandwidthManager* bm);
+    void setManagers(ShareManager* sm, ChunkManager* cm, ChunkStateManager* csm, BandwidthManager* bm);
+    ChunkStateManager* chunkStateManager() const;
     void setTransferLogService(TransferLogService* tls);
+    void setUploadDir(const QString& dir);
+    QString stateFilePathForTask(const QString& fileName, int taskType) const;
     void setUploadPauseCallback(std::function<void(const QString& taskId)> cb);
     void setUploadResumeCallback(std::function<void(const QString& taskId)> cb);
 
@@ -148,9 +157,10 @@ private:
 
     ShareManager* m_shareManager;
     ChunkManager* m_chunkManager;
-    ResumeManager* m_resumeManager;
+    ChunkStateManager* m_chunkStateManager;
     BandwidthManager* m_bandwidthManager;
     TransferLogService* m_transferLogService = nullptr;
+    QString m_uploadDir;
     std::function<void(const QString&)> m_uploadPauseCallback;
     std::function<void(const QString&)> m_uploadResumeCallback;
 

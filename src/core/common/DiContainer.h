@@ -11,7 +11,7 @@
 #include "core/share/FolderPacker.h"
 #include "core/transfer/FileTransferEngine.h"
 #include "core/transfer/ChunkManager.h"
-#include "core/transfer/ResumeManager.h"
+#include "core/transfer/ChunkStateManager.h"
 #include "core/transfer/BandwidthManager.h"
 #include "core/transfer/TransferLogService.h"
 #include "core/common/SettingsManager.h"
@@ -37,13 +37,13 @@ inline auto CoreModule(
 inline auto TransferModule(
     FileTransferEngine& engine,
     ChunkManager& chunkMgr,
-    ResumeManager& resumeMgr,
+    ChunkStateManager& chunkStateMgr,
     BandwidthManager& bwMgr)
 {
     return di::make_injector(
         di::bind<FileTransferEngine>.to(std::ref(engine)),
         di::bind<ChunkManager>.to(std::ref(chunkMgr)),
-        di::bind<ResumeManager>.to(std::ref(resumeMgr)),
+        di::bind<ChunkStateManager>.to(std::ref(chunkStateMgr)),
         di::bind<BandwidthManager>.to(std::ref(bwMgr))
     );
 }
@@ -80,7 +80,7 @@ using NetShareInjector = decltype(di::make_injector(
     std::declval<decltype(TransferModule(
         std::declval<FileTransferEngine&>(),
         std::declval<ChunkManager&>(),
-        std::declval<ResumeManager&>(),
+        std::declval<ChunkStateManager&>(),
         std::declval<BandwidthManager&>()))>(),
     std::declval<decltype(NetworkModule(
         std::declval<CivetWebServer&>(),

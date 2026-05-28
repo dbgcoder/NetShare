@@ -6,24 +6,7 @@
 #include <QList>
 #include <QMap>
 #include <QVariantList>
-
-class ChunkInfo
-{
-    Q_GADGET
-    Q_PROPERTY(int index MEMBER index)
-    Q_PROPERTY(qint64 offset MEMBER offset)
-    Q_PROPERTY(qint64 size MEMBER size)
-    Q_PROPERTY(int status MEMBER status)
-
-public:
-    enum Status { Pending, Downloading, Completed, Failed };
-    Q_ENUM(Status)
-
-    int index = 0;
-    qint64 offset = 0;
-    qint64 size = 0;
-    int status = Pending;
-};
+#include "ChunkState.h"
 
 class ChunkManager : public QObject
 {

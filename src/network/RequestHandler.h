@@ -8,6 +8,7 @@
 #include "IFileBrowser.h"
 #include "IFolderPacker.h"
 #include "StreamingMultipartParser.h"
+#include "ChunkState.h"
 
 struct UploadedFile {
     QString fileName;
@@ -50,23 +51,6 @@ struct SavedFileInfo {
     qint64 fileSize;
 };
 
-struct ChunkUploadInfo {
-    int chunkIndex = 0;
-    qint64 offset = 0;
-    qint64 size = 0;
-    bool completed = false;
-};
-
-struct FileChunkState {
-    QString relativePath;
-    qint64 fileSize = 0;
-    int chunkSize = 0;
-    int totalChunks = 0;
-    QList<ChunkUploadInfo> chunks;
-    int completedChunks = 0;
-    bool useChunking = false;
-};
-
 struct UploadSession {
     QString sessionId;
     QString taskId;
@@ -77,7 +61,7 @@ struct UploadSession {
     QString remoteAddress;
     QList<SavedFileInfo> savedFiles;
     QDateTime createdAt;
-    QMap<QString, FileChunkState> fileChunkStates;
+    QMap<QString, ChunkStateInfo> fileChunkStates;
     QString chunkTempDir;
     bool paused = false;
     QDateTime pausedAt;
@@ -144,6 +128,7 @@ private:
     int handleUploadAbort(mg_connection* conn, const HttpRequestInfo& info);
     int handleUploadPause(mg_connection* conn, const HttpRequestInfo& info);
     int handleUploadResume(mg_connection* conn, const HttpRequestInfo& info);
+    int handleUploadPending(mg_connection* conn, const HttpRequestInfo& info);
     void cleanupExpiredSessions();
 
     QByteArray generateSharePage(const QString& token, const QString& filePath, bool isFolder) const;

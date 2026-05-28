@@ -19,11 +19,11 @@ QVariantList ChunkManager::splitFile(qint64 fileSize, int chunkSize) const
     int index = 0;
 
     while (offset < fileSize) {
-        ChunkInfo chunk;
+        ChunkState chunk;
         chunk.index = index;
         chunk.offset = offset;
         chunk.size = qMin(static_cast<qint64>(chunkSize), fileSize - offset);
-        chunk.status = ChunkInfo::Pending;
+        chunk.status = QStringLiteral("pending");
         result.append(QVariant::fromValue(chunk));
 
         offset += chunk.size;

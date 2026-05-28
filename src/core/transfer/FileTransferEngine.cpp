@@ -2,7 +2,7 @@
 #include "Logger.h"
 #include "ShareManager.h"
 #include "ChunkManager.h"
-#include "ResumeManager.h"
+#include "ChunkStateManager.h"
 #include "BandwidthManager.h"
 #include "TransferLogService.h"
 #include <QDir>
@@ -16,27 +16,45 @@
 
 // TransferWorker Implementation
 TransferWorker::TransferWorker(const QString& url, qint64 offset, qint64 length,
-                               const QString& chunkPath, QObject* parent)
-    : QObject(parent), m_url(url), m_offset(offset), m_length(length), 
-      m_chunkPath(chunkPath), m_file(nullptr), m_networkManager(new QNetworkAccessManager(this))
+                               const QString& chunkPath, int chunkIndex,
+                               QObject* parent)
+    : QObject(parent), m_url(url), m_offset(offset), m_length(length),
+      m_chunkPath(chunkPath), m_chunkIndex(chunkIndex), m_file(nullptr),
+      m_networkManager(new QNetworkAccessManager(this))
 {
+}
+
+void TransferWorker::setResumeOffset(qint64 offset)
+{
+    m_resumeOffset = offset;
 }
 
 void TransferWorker::start()
 {
-    m_file = new QFile(m_chunkPath);
-    if (!m_file->open(QIODevice::WriteOnly)) {
-        emit chunkFinished(-1, false);
-        deleteLater();
-        return;
+    emit chunkStarted(m_chunkIndex);
+
+    qint64 startOffset = m_offset + m_resumeOffset;
+    qint64 endOffset = m_offset + m_length - 1;
+
+    if (m_resumeOffset > 0) {
+        m_file = new QFile(m_chunkPath);
+        if (!m_file->open(QIODevice::WriteOnly | QIODevice::Append)) {
+            emit chunkFinished(m_chunkIndex, false);
+            deleteLater();
+            return;
+        }
+    } else {
+        m_file = new QFile(m_chunkPath);
+        if (!m_file->open(QIODevice::WriteOnly)) {
+            emit chunkFinished(m_chunkIndex, false);
+            deleteLater();
+            return;
+        }
     }
 
     QNetworkRequest request(m_url);
-    QString rangeHeader = QString("bytes=%1-%2").arg(m_offset).arg(m_offset + m_length - 1);
+    QString rangeHeader = QString("bytes=%1-%2").arg(startOffset).arg(endOffset);
     request.setRawHeader("Range", rangeHeader.toUtf8());
-
-    // Note: BandwidthManager integration would happen here by monitoring the reply's speed
-    // and calling QNetworkReply::setReadBufferSize or pausing/resuming.
 
     QNetworkReply* reply = m_networkManager->get(request);
     connect(reply, &QNetworkReply::finished, this, &TransferWorker::onDownloadFinished);
@@ -49,7 +67,7 @@ void TransferWorker::onReadyRead()
     if (reply) {
         QByteArray data = reply->readAll();
         m_file->write(data);
-        emit chunkProgress(data.size());
+        emit chunkProgress(m_chunkIndex, data.size());
     }
 }
 
@@ -61,20 +79,20 @@ void TransferWorker::onDownloadFinished()
         LOG_ERROR("TransferWorker error: %s", qPrintable(reply->errorString()));
         success = false;
     }
-    
+
     if (m_file) {
         m_file->close();
         delete m_file;
     }
     reply->deleteLater();
-    emit chunkFinished(0, success); // Index is handled by the engine
+    emit chunkFinished(m_chunkIndex, success);
     deleteLater();
 }
 
 FileTransferEngine::FileTransferEngine(QObject* parent)
     : QObject(parent), m_mergeWatcher(new QFutureWatcher<void>(this)),
       m_shareManager(nullptr), m_chunkManager(nullptr), 
-      m_resumeManager(nullptr), m_bandwidthManager(nullptr)
+      m_chunkStateManager(nullptr), m_bandwidthManager(nullptr)
 {
     m_tempDirectory = QStandardPaths::writableLocation(QStandardPaths::TempLocation) + "/NetShare";
     QDir().mkpath(m_tempDirectory);
@@ -117,11 +135,11 @@ FileTransferEngine::FileTransferEngine(QObject* parent)
     m_speedCheckTimer->start(30000);
 }
 
-void FileTransferEngine::setManagers(ShareManager* sm, ChunkManager* cm, ResumeManager* rm, BandwidthManager* bm)
+void FileTransferEngine::setManagers(ShareManager* sm, ChunkManager* cm, ChunkStateManager* csm, BandwidthManager* bm)
 {
     m_shareManager = sm;
     m_chunkManager = cm;
-    m_resumeManager = rm;
+    m_chunkStateManager = csm;
     m_bandwidthManager = bm;
 
     if (m_bandwidthManager) {
@@ -133,9 +151,60 @@ void FileTransferEngine::setManagers(ShareManager* sm, ChunkManager* cm, ResumeM
     }
 }
 
+ChunkStateManager* FileTransferEngine::chunkStateManager() const
+{
+    return m_chunkStateManager;
+}
+
 void FileTransferEngine::setTransferLogService(TransferLogService* tls)
 {
     m_transferLogService = tls;
+}
+
+void FileTransferEngine::setUploadDir(const QString& dir)
+{
+    m_uploadDir = dir;
+
+    if (m_chunkStateManager && !m_uploadDir.isEmpty()) {
+        QString uploadChunksDir = m_uploadDir + "/.chunks";
+        m_chunkStateManager->cleanupExpired(uploadChunksDir, 7);
+
+        QList<ChunkStateInfo> resumable = m_chunkStateManager->scanResumableTasks(uploadChunksDir);
+        for (const ChunkStateInfo& csi : resumable) {
+            bool alreadyRestored = false;
+            for (auto it = m_tasks.constBegin(); it != m_tasks.constEnd(); ++it) {
+                if (it.value().fileName == csi.fileName) {
+                    alreadyRestored = true;
+                    break;
+                }
+            }
+            if (alreadyRestored) continue;
+
+            TransferTask task;
+            task.taskId = csi.taskId.isEmpty() ? QUuid::createUuid().toString() : csi.taskId;
+            task.type = (csi.type == QStringLiteral("upload")) ? TransferTask::Upload : TransferTask::Download;
+            task.fileName = csi.fileName;
+            task.filePath = csi.savePath;
+            task.fileSize = csi.fileSize;
+            task.transferredSize = csi.transferredSize;
+            task.progress = task.fileSize > 0 ? static_cast<int>((task.transferredSize * 100) / task.fileSize) : 0;
+            task.status = TransferTask::Paused;
+            task.startedAt = !csi.createdAt.isEmpty() ? QDateTime::fromString(csi.createdAt, Qt::ISODate) : QDateTime::currentDateTime();
+
+            m_tasks[task.taskId] = task;
+            m_lastProgressTime[task.taskId] = QDateTime::currentMSecsSinceEpoch();
+            LOG_INFO("Restored upload resumable task from state file: %s (%s)",
+                     qPrintable(task.taskId), qPrintable(task.fileName));
+        }
+    }
+}
+
+QString FileTransferEngine::stateFilePathForTask(const QString& fileName, int taskType) const
+{
+    if (taskType == TransferTask::Upload && !m_uploadDir.isEmpty()) {
+        return m_uploadDir + "/.chunks/" + fileName + ".netshare";
+    }
+    return m_tempDirectory + "/" + fileName + ".netshare";
 }
 
 void FileTransferEngine::setUploadPauseCallback(std::function<void(const QString&)> cb)
@@ -157,6 +226,15 @@ bool FileTransferEngine::initialize()
         for (const QVariant& v : restorable) {
             TransferLogEntry entry = v.value<TransferLogEntry>();
             if (entry.fileName.isEmpty() && entry.fileSize <= 0) continue;
+
+            bool alreadyRestored = false;
+            for (auto it = m_tasks.constBegin(); it != m_tasks.constEnd(); ++it) {
+                if (it.value().fileName == entry.fileName && it.value().type == entry.type) {
+                    alreadyRestored = true;
+                    break;
+                }
+            }
+            if (alreadyRestored) continue;
 
             TransferTask task;
             task.taskId = entry.taskId;
@@ -180,6 +258,46 @@ bool FileTransferEngine::initialize()
                 LOG_INFO("Restored task: %s (%s) type=%d status=%d",
                          qPrintable(task.taskId), qPrintable(task.fileName), task.type, task.status);
             }
+        }
+    }
+
+    if (m_chunkStateManager && !m_tempDirectory.isEmpty()) {
+        m_chunkStateManager->cleanupExpired(m_tempDirectory, 7);
+
+        QList<ChunkStateInfo> resumable = m_chunkStateManager->scanResumableTasks(m_tempDirectory);
+
+        if (!m_uploadDir.isEmpty()) {
+            QString uploadChunksDir = m_uploadDir + "/.chunks";
+            m_chunkStateManager->cleanupExpired(uploadChunksDir, 7);
+            QList<ChunkStateInfo> uploadResumable = m_chunkStateManager->scanResumableTasks(uploadChunksDir);
+            resumable.append(uploadResumable);
+        }
+
+        for (const ChunkStateInfo& csi : resumable) {
+            bool alreadyRestored = false;
+            for (auto it = m_tasks.constBegin(); it != m_tasks.constEnd(); ++it) {
+                if (it.value().fileName == csi.fileName) {
+                    alreadyRestored = true;
+                    break;
+                }
+            }
+            if (alreadyRestored) continue;
+
+            TransferTask task;
+            task.taskId = csi.taskId.isEmpty() ? QUuid::createUuid().toString() : csi.taskId;
+            task.type = (csi.type == QStringLiteral("upload")) ? TransferTask::Upload : TransferTask::Download;
+            task.fileName = csi.fileName;
+            task.filePath = csi.savePath;
+            task.fileSize = csi.fileSize;
+            task.transferredSize = csi.transferredSize;
+            task.progress = task.fileSize > 0 ? static_cast<int>((task.transferredSize * 100) / task.fileSize) : 0;
+            task.status = TransferTask::Paused;
+            task.startedAt = !csi.createdAt.isEmpty() ? QDateTime::fromString(csi.createdAt, Qt::ISODate) : QDateTime::currentDateTime();
+
+            m_tasks[task.taskId] = task;
+            m_lastProgressTime[task.taskId] = QDateTime::currentMSecsSinceEpoch();
+            LOG_INFO("Restored resumable task from state file: %s (%s) type=%d",
+                     qPrintable(task.taskId), qPrintable(task.fileName), task.type);
         }
     }
 
@@ -210,6 +328,12 @@ void FileTransferEngine::stopAllTasks()
 
     for (auto it = m_tasks.begin(); it != m_tasks.end(); ++it) {
         if (it.value().status == TransferTask::Downloading || it.value().status == TransferTask::Uploading) {
+            if (m_chunkStateManager && !it.value().fileName.isEmpty()) {
+                QString stateFilePath = stateFilePathForTask(it.value().fileName, it.value().type);
+                if (QFile::exists(stateFilePath)) {
+                    m_chunkStateManager->markDownloadingChunksPartial(stateFilePath);
+                }
+            }
             it.value().status = TransferTask::Cancelled;
             it.value().speed = 0;
             if (m_bandwidthManager) m_bandwidthManager->removeRecord(it.key());
@@ -257,9 +381,6 @@ void FileTransferEngine::performDownload(const QString& taskId, const ShareInfo&
 {
     if (!m_chunkManager) return;
 
-    // Check for resume info
-    bool hasResume = m_resumeManager && m_resumeManager->hasResumeInfo(taskId);
-
     qint64 fileSize = QFileInfo(info.filePath).size();
     QString chunkDir = m_tempDirectory + "/" + taskId;
     QDir().mkpath(chunkDir);
@@ -267,30 +388,169 @@ void FileTransferEngine::performDownload(const QString& taskId, const ShareInfo&
     QVariantList chunks = m_chunkManager->splitFileForThreads(fileSize, threads);
     int totalChunks = chunks.size();
 
-    // Track chunk success/failure
-    QAtomicInt failedChunks(0);
-    QList<QFuture<void>> futures;
-    for (const QVariant& v : chunks) {
-        ChunkInfo chunk = v.value<ChunkInfo>();
-        QString chunkPath = chunkDir + QString("/chunk_%1").arg(chunk.index, 6, 10, QChar('0'));
+    QString fileName;
+    if (m_tasks.contains(taskId)) {
+        fileName = m_tasks[taskId].fileName;
+    }
+    if (fileName.isEmpty()) {
+        fileName = QFileInfo(info.filePath).fileName();
+    }
 
-        // If resuming, check if chunk already exists and is complete
-        if (hasResume) {
-            QFileInfo fi(chunkPath);
-            if (fi.exists() && fi.size() == chunk.size) {
-                LOG_INFO("Skipping complete chunk %d for task %s", chunk.index, qPrintable(taskId));
-                continue;
-            } else if (fi.exists()) {
-                QFile::remove(chunkPath);
-                LOG_INFO("Removing incomplete chunk %d for task %s", chunk.index, qPrintable(taskId));
+    QString stateFilePath = m_tempDirectory + "/" + fileName + ".netshare";
+    ChunkStateInfo stateInfo;
+    bool hasResume = false;
+
+    if (m_chunkStateManager) {
+        ChunkStateInfo existingInfo;
+        if (m_chunkStateManager->loadStateFile(stateFilePath, existingInfo)) {
+            if (existingInfo.fileSize == fileSize) {
+                hasResume = true;
+                m_chunkStateManager->validateCompletedChunks(stateFilePath);
+
+                QString oldChunkDir = existingInfo.chunkDir;
+                existingInfo.taskId = taskId;
+                existingInfo.status = QStringLiteral("downloading");
+                existingInfo.chunkDir = chunkDir;
+
+                if (!oldChunkDir.isEmpty() && oldChunkDir != chunkDir) {
+                    QDir().mkpath(chunkDir);
+                    for (ChunkState& cs : existingInfo.chunks) {
+                        if (cs.status != QStringLiteral("completed")) continue;
+                        QString srcPath = oldChunkDir + QString("/chunk_%1").arg(cs.index, 6, 10, QChar('0'));
+                        QString dstPath = chunkDir + QString("/chunk_%1").arg(cs.index, 6, 10, QChar('0'));
+                        if (QFile::exists(srcPath) && !QFile::exists(dstPath)) {
+                            QFile::rename(srcPath, dstPath);
+                        }
+                    }
+                    if (QDir(oldChunkDir).exists()) {
+                        bool dirEmpty = true;
+                        for (const auto& entry : QDir(oldChunkDir).entryInfoList(QDir::Files | QDir::NoDotAndDotDot)) {
+                            Q_UNUSED(entry)
+                            dirEmpty = false;
+                            break;
+                        }
+                        if (dirEmpty) {
+                            QDir(oldChunkDir).removeRecursively();
+                        }
+                    }
+                }
+
+                qint64 recalculatedTransferred = 0;
+                for (const ChunkState& cs : existingInfo.chunks) {
+                    if (cs.status == QStringLiteral("completed")) {
+                        recalculatedTransferred += cs.size;
+                    } else if (cs.status == QStringLiteral("partial")) {
+                        recalculatedTransferred += cs.downloaded;
+                    }
+                }
+                existingInfo.transferredSize = recalculatedTransferred;
+
+                stateInfo = existingInfo;
+                m_chunkStateManager->saveStateFile(stateFilePath, stateInfo);
+            } else {
+                m_chunkStateManager->deleteStateFile(stateFilePath);
             }
         }
 
-        // Construct URL - assuming local server is running on port 8080
+        if (!hasResume) {
+            stateInfo.version = 1;
+            stateInfo.taskId = taskId;
+            stateInfo.type = QStringLiteral("download");
+            stateInfo.fileName = fileName;
+            stateInfo.fileSize = fileSize;
+            stateInfo.chunkSize = m_chunkManager->calculateChunkSize(fileSize, threads);
+            stateInfo.totalChunks = totalChunks;
+            stateInfo.transferredSize = 0;
+            stateInfo.status = QStringLiteral("downloading");
+            stateInfo.url = QString("http://%1:8080/download/%2/").arg(m_shareManager->localIp(), info.token);
+            stateInfo.savePath = savePath;
+            stateInfo.chunkDir = chunkDir;
+
+            stateInfo.chunks.clear();
+            for (const QVariant& v : chunks) {
+                ChunkState cs = v.value<ChunkState>();
+                stateInfo.chunks.append(cs);
+            }
+
+            m_chunkStateManager->createStateFile(stateFilePath, stateInfo);
+        }
+    }
+
+    QAtomicInt failedChunks(0);
+    QList<QFuture<void>> futures;
+    for (const QVariant& v : chunks) {
+        ChunkState chunk = v.value<ChunkState>();
+        QString chunkPath = chunkDir + QString("/chunk_%1").arg(chunk.index, 6, 10, QChar('0'));
+
+        if (hasResume && m_chunkStateManager) {
+            ChunkStateInfo currentInfo;
+            if (m_chunkStateManager->loadStateFile(stateFilePath, currentInfo)) {
+                if (chunk.index < currentInfo.chunks.size()) {
+                    const ChunkState& cs = currentInfo.chunks[chunk.index];
+
+                    if (cs.status == QStringLiteral("completed")) {
+                        QFileInfo fi(chunkPath);
+                        if (fi.exists() && fi.size() == chunk.size) {
+                            LOG_INFO("Skipping complete chunk %d for task %s", chunk.index, qPrintable(taskId));
+                            continue;
+                        }
+                    }
+
+                    if (cs.status == QStringLiteral("failed")) {
+                        QString failedPath = chunkPath;
+                        if (QFile::exists(failedPath)) {
+                            QFile::remove(failedPath);
+                            LOG_INFO("Removing failed chunk %d for task %s", chunk.index, qPrintable(taskId));
+                        }
+                    }
+
+                    if (cs.status == QStringLiteral("downloading")) {
+                        QFileInfo fi(chunkPath);
+                        if (fi.exists() && fi.size() > 0 && fi.size() < chunk.size) {
+                            LOG_INFO("Downloading chunk %d treated as partial (%lld/%lld bytes) for task %s",
+                                     chunk.index, fi.size(), chunk.size, qPrintable(taskId));
+                        } else if (fi.exists()) {
+                            QFile::remove(chunkPath);
+                            LOG_INFO("Removing invalid downloading chunk %d for task %s", chunk.index, qPrintable(taskId));
+                        }
+                    }
+                }
+            }
+        }
+
         QString url = QString("http://%1:8080/download/%2/").arg(m_shareManager->localIp(), info.token);
 
-        TransferWorker* worker = new TransferWorker(url, chunk.offset, chunk.size, chunkPath);
-        connect(worker, &TransferWorker::chunkProgress, this, [this, taskId](qint64 bytes) {
+        TransferWorker* worker = new TransferWorker(url, chunk.offset, chunk.size, chunkPath, chunk.index);
+
+        if (hasResume && m_chunkStateManager) {
+            qint64 resumeOffset = 0;
+            ChunkStateInfo currentInfo;
+            if (m_chunkStateManager->loadStateFile(stateFilePath, currentInfo)) {
+                if (chunk.index < currentInfo.chunks.size()) {
+                    const ChunkState& cs = currentInfo.chunks[chunk.index];
+                    if (cs.status == QStringLiteral("partial") || cs.status == QStringLiteral("downloading")) {
+                        resumeOffset = cs.downloaded;
+                    }
+                }
+            }
+            if (resumeOffset <= 0) {
+                QFileInfo fi(chunkPath);
+                if (fi.exists() && fi.size() > 0 && fi.size() < chunk.size) {
+                    resumeOffset = fi.size();
+                }
+            }
+            if (resumeOffset > 0 && resumeOffset < chunk.size) {
+                worker->setResumeOffset(resumeOffset);
+            }
+        }
+
+        QString capturedStateFilePath = stateFilePath;
+        connect(worker, &TransferWorker::chunkStarted, this, [this, capturedStateFilePath](int chunkIndex) {
+            if (m_chunkStateManager) {
+                m_chunkStateManager->updateChunkStatus(capturedStateFilePath, chunkIndex, QStringLiteral("downloading"), 0);
+            }
+        });
+        connect(worker, &TransferWorker::chunkProgress, this, [this, taskId](int, qint64 bytes) {
             QMetaObject::invokeMethod(this, [this, taskId, bytes]() {
                 if (m_tasks.contains(taskId)) {
                     if (m_bandwidthManager) m_bandwidthManager->recordTransfer(taskId, static_cast<int>(bytes));
@@ -303,37 +563,43 @@ void FileTransferEngine::performDownload(const QString& taskId, const ShareInfo&
             }, Qt::QueuedConnection);
         });
 
-        QFuture<void> future = QtConcurrent::run([worker, &failedChunks]() {
+        qint64 capturedChunkSize = chunk.size;
+        QFuture<void> future = QtConcurrent::run([worker, &failedChunks, this, capturedStateFilePath, capturedChunkSize]() {
             QEventLoop loop;
-            QObject::connect(worker, &TransferWorker::chunkFinished, &loop, [&loop, &failedChunks](int, bool success) {
-                if (success) {
-                    loop.quit();
-                } else {
-                    failedChunks.fetchAndAddRelaxed(1);
-                    loop.exit(1); // Error
-                }
-            });
+            QObject::connect(worker, &TransferWorker::chunkFinished, &loop,
+                [&loop, &failedChunks, this, capturedStateFilePath, capturedChunkSize](int chunkIndex, bool success) {
+                    if (success) {
+                        if (m_chunkStateManager && !capturedStateFilePath.isEmpty()) {
+                            m_chunkStateManager->updateChunkStatus(capturedStateFilePath, chunkIndex,
+                                QStringLiteral("completed"), capturedChunkSize);
+                        }
+                        loop.quit();
+                    } else {
+                        failedChunks.fetchAndAddRelaxed(1);
+                        if (m_chunkStateManager && !capturedStateFilePath.isEmpty()) {
+                            m_chunkStateManager->updateChunkStatus(capturedStateFilePath, chunkIndex,
+                                QStringLiteral("failed"), 0);
+                        }
+                        loop.exit(1);
+                    }
+                });
             worker->start();
             loop.exec();
         });
         futures.append(future);
     }
 
-    // Wait for all chunks to finish
     for (auto& f : futures) {
         f.waitForFinished();
     }
 
-    // Check if any chunks failed
     if (failedChunks.loadAcquire() > 0) {
         LOG_ERROR("Download failed for task %s: %d chunk(s) failed", qPrintable(taskId), failedChunks.loadAcquire());
 
-        // Clean up chunk files
         QDir(chunkDir).removeRecursively();
 
-        // Clean up resume info
-        if (m_resumeManager) {
-            m_resumeManager->removeResumeInfo(taskId);
+        if (m_chunkStateManager && !stateFilePath.isEmpty()) {
+            m_chunkStateManager->deleteStateFile(stateFilePath);
         }
 
         QMetaObject::invokeMethod(this, [this, taskId]() {
@@ -342,7 +608,6 @@ void FileTransferEngine::performDownload(const QString& taskId, const ShareInfo&
                 m_tasks[taskId].error = "Chunk download failed";
                 emit taskFailed(taskId, m_tasks[taskId].error);
 
-                // Log download failure to database
                 if (m_transferLogService) {
                     const TransferTask& task = m_tasks[taskId];
                     m_transferLogService->logTransfer(
@@ -359,10 +624,10 @@ void FileTransferEngine::performDownload(const QString& taskId, const ShareInfo&
     QString finalPath = savePath + "/" + QFileInfo(info.filePath).fileName();
     m_chunkManager->mergeChunks(chunkDir, finalPath, totalChunks);
 
-    // Clean up resume info
-    if (m_resumeManager) {
-        m_resumeManager->removeResumeInfo(taskId);
+    if (m_chunkStateManager && !stateFilePath.isEmpty()) {
+        m_chunkStateManager->deleteStateFile(stateFilePath);
     }
+    QDir(chunkDir).removeRecursively();
 
     QMetaObject::invokeMethod(this, [this, taskId]() {
         if (m_tasks.contains(taskId)) {
@@ -401,6 +666,13 @@ bool FileTransferEngine::pauseTask(const QString& taskId)
         m_tasks[taskId].speed = 0;
         if (m_bandwidthManager) m_bandwidthManager->removeRecord(taskId);
 
+        if (m_chunkStateManager) {
+            QString stateFilePath = stateFilePathForTask(m_tasks[taskId].fileName, m_tasks[taskId].type);
+            if (QFile::exists(stateFilePath)) {
+                m_chunkStateManager->markDownloadingChunksPartial(stateFilePath);
+            }
+        }
+
         if (m_uploadPauseCallback && m_tasks[taskId].type == TransferTask::Upload)
             m_uploadPauseCallback(taskId);
 
@@ -424,6 +696,15 @@ bool FileTransferEngine::resumeTask(const QString& taskId)
         m_tasks[taskId].status = (m_tasks[taskId].type == TransferTask::Upload) ? TransferTask::Uploading : TransferTask::Downloading;
         m_tasks[taskId].error.clear();
         m_lastProgressTime[taskId] = QDateTime::currentMSecsSinceEpoch();
+
+        if (m_chunkStateManager) {
+            QString stateFilePath = stateFilePathForTask(m_tasks[taskId].fileName, m_tasks[taskId].type);
+            if (QFile::exists(stateFilePath)) {
+                QString resumeStatus = (m_tasks[taskId].type == TransferTask::Upload)
+                    ? QStringLiteral("uploading") : QStringLiteral("downloading");
+                m_chunkStateManager->updateTaskStatus(stateFilePath, resumeStatus);
+            }
+        }
 
         if (m_uploadResumeCallback && m_tasks[taskId].type == TransferTask::Upload)
             m_uploadResumeCallback(taskId);
@@ -458,6 +739,19 @@ bool FileTransferEngine::cancelTask(const QString& taskId)
         m_speedHistory.remove(taskId);
         m_lastProgressTime.remove(taskId);
         if (m_bandwidthManager) m_bandwidthManager->removeRecord(taskId);
+
+        if (m_chunkStateManager) {
+            QString stateFilePath = stateFilePathForTask(m_tasks[taskId].fileName, m_tasks[taskId].type);
+            if (QFile::exists(stateFilePath)) {
+                m_chunkStateManager->deleteStateFile(stateFilePath);
+            }
+        }
+
+        QString chunkDir = m_tempDirectory + "/" + taskId;
+        if (QDir(chunkDir).exists()) {
+            QDir(chunkDir).removeRecursively();
+        }
+
         emit taskCancelled(taskId);
         m_tasks.remove(taskId);
         return true;
@@ -506,6 +800,21 @@ bool FileTransferEngine::deleteTask(const QString& taskId)
         m_speedHistory.remove(taskId);
         m_lastProgressTime.remove(taskId);
         if (m_bandwidthManager) m_bandwidthManager->removeRecord(taskId);
+    }
+
+    if (m_chunkStateManager && !fileName.isEmpty()) {
+        int effectiveType = taskType >= 0 ? taskType : TransferTask::Download;
+        QString stateFilePath = stateFilePathForTask(fileName, effectiveType);
+        if (QFile::exists(stateFilePath)) {
+            m_chunkStateManager->deleteStateFile(stateFilePath);
+        }
+    }
+
+    if (!fileName.isEmpty()) {
+        QString chunkDir = m_tempDirectory + "/" + taskId;
+        if (QDir(chunkDir).exists()) {
+            QDir(chunkDir).removeRecursively();
+        }
     }
 
     if (m_transferLogService) {
@@ -672,7 +981,8 @@ void FileTransferEngine::removeFailedUploadTasksByName(const QString& fileName)
         if (it.value().type == TransferTask::Upload
             && it.value().fileName == fileName
             && (it.value().status == TransferTask::Failed
-                || it.value().status == TransferTask::Uploading)) {
+                || it.value().status == TransferTask::Uploading
+                || it.value().status == TransferTask::Paused)) {
             toRemove.append(it.key());
         }
     }
@@ -680,4 +990,20 @@ void FileTransferEngine::removeFailedUploadTasksByName(const QString& fileName)
         m_tasks.remove(taskId);
         if (m_bandwidthManager) m_bandwidthManager->removeRecord(taskId);
     }
+    if (!toRemove.isEmpty()) {
+        LOG_INFO("[TaskManager][remove.paused] file=%s, removed=%s",
+                 qPrintable(fileName), qPrintable(toRemove.join(", ")));
+    }
+}
+
+QString FileTransferEngine::findUploadTaskByName(const QString& fileName) const
+{
+    for (auto it = m_tasks.constBegin(); it != m_tasks.constEnd(); ++it) {
+        if (it.value().type == TransferTask::Upload
+            && it.value().fileName == fileName
+            && it.value().status == TransferTask::Paused) {
+            return it.key();
+        }
+    }
+    return QString();
 }

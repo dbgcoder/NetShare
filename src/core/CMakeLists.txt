@@ -30,7 +30,7 @@ set(NETSHARE_CORE_SHARE_HEADERS
 set(NETSHARE_CORE_TRANSFER_SOURCES
     transfer/FileTransferEngine.cpp
     transfer/ChunkManager.cpp
-    transfer/ResumeManager.cpp
+    transfer/ChunkStateManager.cpp
     transfer/BandwidthManager.cpp
     transfer/TransferLogService.cpp
 )
@@ -38,7 +38,8 @@ set(NETSHARE_CORE_TRANSFER_SOURCES
 set(NETSHARE_CORE_TRANSFER_HEADERS
     transfer/FileTransferEngine.h
     transfer/ChunkManager.h
-    transfer/ResumeManager.h
+    transfer/ChunkState.h
+    transfer/ChunkStateManager.h
     transfer/BandwidthManager.h
     transfer/TransferLogService.h
 )
