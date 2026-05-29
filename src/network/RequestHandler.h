@@ -17,6 +17,7 @@ struct UploadedFile {
 
 class FileTransferEngine;
 class TransferLogService;
+class ChatService;
 
 struct StreamingUploadState {
     StreamingMultipartParser* parser;
@@ -88,6 +89,7 @@ public:
 
     void setTransferEngine(FileTransferEngine* engine);
     void setTransferLogService(TransferLogService* service);
+    void setChatService(ChatService* chatService);
 
     QString tokenForTask(const QString& taskId) const;
     QString shareTokenForTask(const QString& taskId) const;
@@ -129,6 +131,7 @@ private:
     int handleUploadPause(mg_connection* conn, const HttpRequestInfo& info);
     int handleUploadResume(mg_connection* conn, const HttpRequestInfo& info);
     int handleUploadPending(mg_connection* conn, const HttpRequestInfo& info);
+    int handleChatMessage(mg_connection* conn, const HttpRequestInfo& info);
     void cleanupExpiredSessions();
 
     QByteArray generateSharePage(const QString& token, const QString& filePath, bool isFolder) const;
@@ -147,6 +150,7 @@ private:
     IFolderPacker* m_folderPacker;
     FileTransferEngine* m_transferEngine;
     TransferLogService* m_transferLogService;
+    ChatService* m_chatService = nullptr;
     SettingsManager* m_settingsManager;
     QString m_uploadDir;
     CivetWebServer* m_civetServer = nullptr;

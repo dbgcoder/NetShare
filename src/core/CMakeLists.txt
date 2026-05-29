@@ -52,6 +52,14 @@ set(NETSHARE_CORE_NOTIFICATION_HEADERS
     notification/NotificationManager.h
 )
 
+set(NETSHARE_CORE_CHAT_SOURCES
+    chat/ChatService.cpp
+)
+
+set(NETSHARE_CORE_CHAT_HEADERS
+    chat/ChatService.h
+)
+
 add_library(NetshareCore STATIC
     ${NETSHARE_CORE_SOURCES}
     ${NETSHARE_CORE_HEADERS}
@@ -61,6 +69,8 @@ add_library(NetshareCore STATIC
     ${NETSHARE_CORE_TRANSFER_HEADERS}
     ${NETSHARE_CORE_NOTIFICATION_SOURCES}
     ${NETSHARE_CORE_NOTIFICATION_HEADERS}
+    ${NETSHARE_CORE_CHAT_SOURCES}
+    ${NETSHARE_CORE_CHAT_HEADERS}
 )
 
 set_target_properties(NetshareCore PROPERTIES
@@ -75,7 +85,10 @@ target_include_directories(NetshareCore PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/share
     ${CMAKE_CURRENT_SOURCE_DIR}/transfer
     ${CMAKE_CURRENT_SOURCE_DIR}/notification
+    ${CMAKE_CURRENT_SOURCE_DIR}/chat
     ${CMAKE_CURRENT_SOURCE_DIR}/../database
+    ${CMAKE_CURRENT_SOURCE_DIR}/../network
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/civetweb_src/include
     ${CMAKE_BINARY_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/boost-di
 )

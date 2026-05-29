@@ -8,6 +8,7 @@
 #include "ChunkStateManager.h"
 #include "TransferLogService.h"
 #include "SettingsManager.h"
+#include "chat/ChatService.h"
 #include "Logger.h"
 #include <QCoreApplication>
 #include <QFile>
@@ -88,6 +89,11 @@ void RequestHandler::setTransferEngine(FileTransferEngine* engine)
 void RequestHandler::setTransferLogService(TransferLogService* service)
 {
     m_transferLogService = service;
+}
+
+void RequestHandler::setChatService(ChatService* chatService)
+{
+    m_chatService = chatService;
 }
 
 QString RequestHandler::tokenForTask(const QString& taskId) const
@@ -230,6 +236,10 @@ void RequestHandler::registerRoutes(CivetWebServer* server)
 
     server->addRoute("GET", "/api/upload/pending", [this](mg_connection* conn, const HttpRequestInfo& info) {
         return handleUploadPending(conn, info);
+    });
+
+    server->addRoute("POST", "/api/chat/message", [this](mg_connection* conn, const HttpRequestInfo& info) {
+        return handleChatMessage(conn, info);
     });
 
     server->addStreamingRoute("POST", "/upload/*", [this](mg_connection* conn, const HttpRequestInfo& info,
@@ -383,6 +393,7 @@ int RequestHandler::handleFileDownload(mg_connection* conn, const HttpRequestInf
     QString capturedTaskId = downloadTaskId;
     qint64 sent = CivetWebServer::sendStreamingFileResponse(conn, filePath, contentType, fi.fileName(), rangeHeader,
         [this, capturedTaskId](qint64 totalSent, qint64 fileSize) {
+            Q_UNUSED(fileSize)
             if (m_transferEngine && !capturedTaskId.isEmpty()) {
                 QMetaObject::invokeMethod(m_transferEngine, [this, capturedTaskId, totalSent]() {
                     m_transferEngine->updateTaskProgress(capturedTaskId, totalSent);
@@ -476,6 +487,7 @@ int RequestHandler::handleFolderDownload(mg_connection* conn, const HttpRequestI
     qint64 sent = CivetWebServer::sendStreamingFileResponse(conn, outputPath, QStringLiteral("application/zip"),
                                                zipName, rangeHeader,
         [this, capturedTaskId](qint64 totalSent, qint64 fileSize) {
+            Q_UNUSED(fileSize)
             if (m_transferEngine && !capturedTaskId.isEmpty()) {
                 QMetaObject::invokeMethod(m_transferEngine, [this, capturedTaskId, totalSent]() {
                     m_transferEngine->updateTaskProgress(capturedTaskId, totalSent);
@@ -1626,6 +1638,7 @@ int RequestHandler::handleUploadResume(mg_connection* conn, const HttpRequestInf
 
 int RequestHandler::handleUploadPending(mg_connection* conn, const HttpRequestInfo& info)
 {
+    Q_UNUSED(info)
     ChunkStateManager* csm = m_transferEngine ? m_transferEngine->chunkStateManager() : nullptr;
     if (!csm) {
         CivetWebServer::sendJsonResponse(conn, 200, "{\"partial\":[]}");
@@ -2130,4 +2143,35 @@ void RequestHandler::onUploadFinalizeReady(const QList<SavedFileInfo>& savedFile
         }
         if (m_transferEngine) m_transferEngine->completeTask(taskId);
     }
+}
+
+int RequestHandler::handleChatMessage(mg_connection* conn, const HttpRequestInfo& info)
+{
+    if (!m_chatService) {
+        CivetWebServer::sendJsonResponse(conn, 503, "{\"status\":\"error\",\"message\":\"Chat service not available\"}");
+        return 503;
+    }
+
+    QJsonParseError parseError;
+    QJsonDocument doc = QJsonDocument::fromJson(info.body, &parseError);
+    if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
+        CivetWebServer::sendJsonResponse(conn, 400, "{\"status\":\"error\",\"message\":\"Invalid JSON\"}");
+        return 400;
+    }
+
+    QJsonObject obj = doc.object();
+    QString from = obj[QStringLiteral("from")].toString();
+    QString fromIp = obj[QStringLiteral("fromIp")].toString();
+    QString content = obj[QStringLiteral("content")].toString();
+    QString timestamp = obj[QStringLiteral("timestamp")].toString();
+
+    if (content.trimmed().isEmpty()) {
+        CivetWebServer::sendJsonResponse(conn, 400, "{\"status\":\"error\",\"message\":\"Content is empty\"}");
+        return 400;
+    }
+
+    m_chatService->onMessageReceived(from, fromIp, content, timestamp, info.remoteAddress);
+
+    CivetWebServer::sendJsonResponse(conn, 200, "{\"status\":\"ok\"}");
+    return 200;
 }

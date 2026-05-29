@@ -45,6 +45,7 @@ qt_add_qml_module(${NETSHARE_GUI_MODULE_NAME}
         qml/TransferList.qml
         qml/DeviceDiscovery.qml
         qml/SettingsPage.qml
+        qml/MessagePage.qml
 )
 
 # =============================================================================

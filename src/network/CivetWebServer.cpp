@@ -4,6 +4,7 @@
 #include <QByteArray>
 #include <QDateTime>
 #include <QFile>
+#include <QHostAddress>
 #include <QJsonDocument>
 #include <QRegularExpression>
 #include <QUrl>
@@ -200,19 +201,78 @@ void CivetWebServer::broadcastToSubscribers(const QString& token, const QString&
 
     auto it = m_wsClients.find(token);
     if (it == m_wsClients.end()) {
+        LOG_WARN("broadcastToSubscribers: no clients for token=%s", qPrintable(token));
         return;
     }
 
+    LOG_INFO("broadcastToSubscribers: token=%s type=%s client_count=%d payload_size=%d",
+             qPrintable(token), qPrintable(type),
+             static_cast<int>(it.value().size()), payload.size());
+
+    QList<mg_connection*> deadConns;
     for (mg_connection* client : it.value()) {
-        mg_websocket_write(client, MG_WEBSOCKET_OPCODE_TEXT,
+        int ret = mg_websocket_write(client, MG_WEBSOCKET_OPCODE_TEXT,
                            payload.constData(), payload.size());
+        LOG_INFO("broadcastToSubscribers: write to conn=%p returned %d",
+                 static_cast<void*>(client), ret);
+        if (ret <= 0) {
+            deadConns.append(client);
+        }
     }
+    for (auto* conn : deadConns) {
+        unsubscribeClientFromAll(conn);
+        m_connToIp.remove(conn);
+    }
+}
+
+bool CivetWebServer::sendToIp(const QString& ip, const QString& type, const QJsonObject& data)
+{
+    QJsonObject msg;
+    msg[QStringLiteral("type")] = type;
+    msg[QStringLiteral("data")] = data;
+
+    QByteArray payload = QJsonDocument(msg).toJson(QJsonDocument::Compact);
+
+    LOG_INFO("sendToIp target=%s type=%s payload_size=%d m_connToIp size=%d",
+             qPrintable(ip), qPrintable(type), payload.size(), static_cast<int>(m_connToIp.size()));
+
+    bool sent = false;
+    QList<mg_connection*> deadConns;
+    for (auto it = m_connToIp.constBegin(); it != m_connToIp.constEnd(); ++it) {
+        if (it.value() == ip) {
+            int ret = mg_websocket_write(it.key(), MG_WEBSOCKET_OPCODE_TEXT,
+                               payload.constData(), payload.size());
+            LOG_INFO("sendToIp mg_websocket_write conn=%p returned %d",
+                     static_cast<void*>(it.key()), ret);
+            if (ret > 0) {
+                sent = true;
+            } else {
+                LOG_WARN("sendToIp: connection %p appears dead (write returned %d), will cleanup",
+                         static_cast<void*>(it.key()), ret);
+                deadConns.append(it.key());
+            }
+        }
+    }
+
+    for (auto* conn : deadConns) {
+        unsubscribeClientFromAll(conn);
+        m_connToIp.remove(conn);
+    }
+
+    if (!sent && deadConns.isEmpty()) {
+        LOG_WARN("sendToIp: no connection found for IP %s", qPrintable(ip));
+    }
+
+    return sent;
 }
 
 void CivetWebServer::subscribeClient(mg_connection* conn, const QString& token)
 {
     m_wsClients[token].insert(conn);
     m_wsSubscriptions[conn].insert(token);
+    LOG_INFO("subscribeClient: conn=%p token=%s total_clients_for_token=%d",
+             static_cast<void*>(conn), qPrintable(token),
+             static_cast<int>(m_wsClients.value(token).size()));
 }
 
 void CivetWebServer::unsubscribeClient(mg_connection* conn, const QString& token)
@@ -231,6 +291,9 @@ void CivetWebServer::unsubscribeClientFromAll(mg_connection* conn)
         return;
     }
 
+    LOG_INFO("unsubscribeClientFromAll: conn=%p tokens=%d",
+             static_cast<void*>(conn), static_cast<int>(it.value().size()));
+
     for (const QString& token : it.value()) {
         m_wsClients[token].remove(conn);
         if (m_wsClients[token].isEmpty()) {
@@ -239,6 +302,7 @@ void CivetWebServer::unsubscribeClientFromAll(mg_connection* conn)
     }
     m_wsSubscriptions.erase(it);
     m_wsLastPong.remove(conn);
+    m_connToIp.remove(conn);
 }
 
 int CivetWebServer::connectedClientCount() const
@@ -423,6 +487,8 @@ void CivetWebServer::sendHeartbeat()
     }
 
     for (mg_connection* conn : timedOut) {
+        LOG_WARN("Heartbeat: closing timed-out connection %p (no pong for 60s)",
+                 static_cast<void*>(conn));
         unsubscribeClientFromAll(conn);
         mg_close_connection(conn);
     }
@@ -541,10 +607,28 @@ int CivetWebServer::staticWsConnectHandler(const mg_connection* conn, void* cbda
 void CivetWebServer::staticWsReadyHandler(mg_connection* conn, void* cbdata)
 {
     auto* self = static_cast<CivetWebServer*>(cbdata);
-    if (!self || !self->m_wsReadyHandler) {
+    if (!self) {
         return;
     }
-    self->m_wsReadyHandler(conn);
+
+    const mg_request_info* ri = mg_get_request_info(conn);
+    if (ri && ri->remote_addr) {
+        QString remoteAddr = QString::fromUtf8(ri->remote_addr);
+        QHostAddress addr(remoteAddr);
+        QString pureIp = addr.isNull() ? remoteAddr : addr.toString();
+        self->m_connToIp[conn] = pureIp;
+        LOG_INFO("WebSocket ready: stored IP mapping %s (raw=%s)",
+                 qPrintable(pureIp), qPrintable(remoteAddr));
+    } else {
+        LOG_WARN("WebSocket ready: ri=%p ri->remote_addr=%p",
+                 static_cast<const void*>(ri), ri ? static_cast<const void*>(ri->remote_addr) : nullptr);
+    }
+
+    self->m_wsLastPong[conn] = QDateTime::currentSecsSinceEpoch();
+
+    if (self->m_wsReadyHandler) {
+        self->m_wsReadyHandler(conn);
+    }
 }
 
 int CivetWebServer::staticWsDataHandler(mg_connection* conn, int op, char* data, size_t len, void* cbdata)
@@ -554,15 +638,28 @@ int CivetWebServer::staticWsDataHandler(mg_connection* conn, int op, char* data,
         return 0;
     }
 
-    if (op == MG_WEBSOCKET_OPCODE_PONG) {
+    int pureOp = op & 0x0F;
+
+    if (pureOp == MG_WEBSOCKET_OPCODE_PONG) {
         self->m_wsLastPong[conn] = QDateTime::currentSecsSinceEpoch();
-        return 0;
+        return 1;
+    }
+
+    if (pureOp == MG_WEBSOCKET_OPCODE_TEXT && data && len > 0) {
+        LOG_INFO("staticWsDataHandler: conn=%p op=%d pureOp=TEXT len=%zu data=%.100s",
+                 static_cast<void*>(conn), op, len,
+                 QByteArray(data, static_cast<int>(qMin(len, static_cast<size_t>(100)))).constData());
+    } else if (pureOp != MG_WEBSOCKET_OPCODE_PONG) {
+        LOG_INFO("staticWsDataHandler: conn=%p op=%d pureOp=%d len=%zu",
+                 static_cast<void*>(conn), op, pureOp, len);
     }
 
     if (self->m_wsDataHandler) {
-        return self->m_wsDataHandler(conn, op, data, len);
+        return self->m_wsDataHandler(conn, pureOp, data, len);
+    } else {
+        LOG_WARN("staticWsDataHandler: m_wsDataHandler is NULL!");
     }
-    return 0;
+    return 1;
 }
 
 void CivetWebServer::staticWsCloseHandler(const mg_connection* conn, void* cbdata)

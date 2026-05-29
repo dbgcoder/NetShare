@@ -13,7 +13,6 @@ set(WEB_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 # =============================================================================
 set(WEB_HTML_FILES
     index.html
-    upload.html
     receive.html
 )
 

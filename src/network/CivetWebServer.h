@@ -55,6 +55,7 @@ public:
 
     void broadcastToSubscribers(const QString& token, const QString& type,
                                 const QJsonObject& data);
+    bool sendToIp(const QString& ip, const QString& type, const QJsonObject& data);
     void subscribeClient(mg_connection* conn, const QString& token);
     void unsubscribeClient(mg_connection* conn, const QString& token);
     void unsubscribeClientFromAll(mg_connection* conn);
@@ -128,6 +129,7 @@ private:
     QMap<QString, QSet<mg_connection*>> m_wsClients;
     QMap<mg_connection*, QSet<QString>> m_wsSubscriptions;
     QMap<mg_connection*, qint64> m_wsLastPong;
+    QMap<mg_connection*, QString> m_connToIp;
 
     QTimer* m_heartbeatTimer = nullptr;
 };

@@ -44,7 +44,7 @@ ApplicationWindow {
         MouseArea {
             id: dragArea
             anchors.fill: parent
-            anchors.rightMargin: settingsBtn.width + minimizeBtn.width + maximizeBtn.width + closeBtn.width
+            anchors.rightMargin: messageBtn.width + settingsBtn.width + minimizeBtn.width + maximizeBtn.width + closeBtn.width
             onPressed: function(mouse) {
                 if (mouse.button === Qt.LeftButton) {
                     root.startSystemMove()
@@ -63,6 +63,58 @@ ApplicationWindow {
             text: root.title
             color: Theme.textSecondary
             font.pixelSize: 12
+        }
+
+        // Message button
+        Rectangle {
+            id: messageBtn
+            anchors.right: settingsBtn.left
+            anchors.verticalCenter: parent.verticalCenter
+            width: 46
+            height: titleBar.height
+            color: messageMouseArea.containsMouse ? "#3e3e42" : "transparent"
+
+            Label {
+                anchors.centerIn: parent
+                text: "\uD83D\uDCAC"
+                font.pixelSize: 16
+                color: Theme.textColor
+            }
+
+            Rectangle {
+                visible: typeof chatService !== 'undefined' && chatService.totalUnreadCount > 0
+                anchors.right: parent.right
+                anchors.top: parent.top
+                anchors.rightMargin: 8
+                anchors.topMargin: 4
+                width: 18
+                height: 18
+                radius: 9
+                color: Theme.errorColor
+
+                Label {
+                    anchors.centerIn: parent
+                    text: {
+                        if (typeof chatService === 'undefined') return ""
+                        var c = chatService.totalUnreadCount
+                        return c > 99 ? "99+" : c
+                    }
+                    font.pixelSize: 9
+                    color: "#ffffff"
+                }
+            }
+
+            MouseArea {
+                id: messageMouseArea
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
+                    menuList.currentIndex = -1
+                    root.isSettingsPage = true
+                    stackView.replace(messagePage)
+                }
+            }
         }
 
         // Settings button
@@ -270,8 +322,8 @@ ApplicationWindow {
             anchors.topMargin: 8
 
             model: ListModel {
-                ListElement { title: qsTr("接收管理"); icon: "📥" }
                 ListElement { title: qsTr("分享管理"); icon: "🔗" }
+                ListElement { title: qsTr("接收管理"); icon: "📥" }
                 ListElement { title: qsTr("传输列表"); icon: "📤" }
                 ListElement { title: qsTr("设备发现"); icon: "🌐" }
             }
@@ -341,7 +393,18 @@ ApplicationWindow {
         replaceEnter: Transition {}
         replaceExit: Transition {}
 
-        initialItem: receiveManagementPage
+        initialItem: shareManagementPage
+    }
+
+    Component {
+        id: messagePage
+        MessagePage {
+            onCloseMessage: {
+                menuList.currentIndex = 0
+                root.isSettingsPage = false
+                stackView.replace(shareManagementPage)
+            }
+        }
     }
 
     Component {
@@ -370,14 +433,14 @@ ApplicationWindow {
             onCloseSettings: {
                 menuList.currentIndex = 0
                 root.isSettingsPage = false
-                stackView.replace(pageStack[0])
+                stackView.replace(shareManagementPage)
             }
         }
     }
 
     property list<QtObject> pageStack: [
-        receiveManagementPage,
         shareManagementPage,
+        receiveManagementPage,
         transferPage,
         devicePage,
         settingsPage

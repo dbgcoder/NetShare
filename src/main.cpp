@@ -35,6 +35,7 @@
 #include "core/transfer/BandwidthManager.h"
 #include "core/transfer/TransferLogService.h"
 #include "core/notification/NotificationManager.h"
+#include "core/chat/ChatService.h"
 #include "database/DatabaseManager.h"
 #include "network/CivetWebServer.h"
 #include "network/mDNSService.h"
@@ -345,18 +346,30 @@ private:
             [this](mg_connection* conn, int op, char* data, size_t len) -> int {
                 if (op == MG_WEBSOCKET_OPCODE_TEXT) {
                     QByteArray msg(data, static_cast<int>(len));
+                    LOG_INFO("WS data handler: received text len=%d: %.100s",
+                             msg.size(), msg.left(100).constData());
                     QJsonDocument doc = QJsonDocument::fromJson(msg);
                     if (doc.isObject()) {
                         QJsonObject obj = doc.object();
                         QString type = obj["type"].toString();
-                        if (type == "subscribe" && obj.contains("token")) {
-                            m_civetServer->subscribeClient(conn, obj["token"].toString());
-                        } else if (type == "unsubscribe" && obj.contains("token")) {
-                            m_civetServer->unsubscribeClient(conn, obj["token"].toString());
+                        QString token;
+                        if (obj.contains("token")) {
+                            token = obj["token"].toString();
+                        } else if (obj.contains("data") && obj["data"].isObject()) {
+                            token = obj["data"].toObject()["token"].toString();
                         }
+                        LOG_INFO("WS data handler: type=%s token=%s",
+                                 qPrintable(type), qPrintable(token));
+                        if (type == "subscribe" && !token.isEmpty()) {
+                            m_civetServer->subscribeClient(conn, token);
+                        } else if (type == "unsubscribe" && !token.isEmpty()) {
+                            m_civetServer->unsubscribeClient(conn, token);
+                        }
+                    } else {
+                        LOG_WARN("WS data handler: JSON parse failed for: %.50s", msg.left(50).constData());
                     }
                 }
-                return 0;
+                return 1;
             },
             [this](const mg_connection* conn) {
                 m_civetServer->unsubscribeClientFromAll(const_cast<mg_connection*>(conn));
@@ -379,6 +392,10 @@ private:
         QString serviceName = m_settings->getString("advanced/mDNSServiceName", "NetShare");
         m_mdnsService->registerService(serviceName, port);
         LOG_INFO("mDNS service registered as '%s'", qPrintable(serviceName));
+
+        m_chatService = new ChatService(m_mdnsService, m_civetServer, m_settings, this);
+        requestHandler->setChatService(m_chatService);
+        LOG_INFO("ChatService initialized");
 
         if (m_transferEngine) {
             connect(m_transferEngine, &FileTransferEngine::taskProgress,
@@ -447,6 +464,7 @@ private:
         m_engine->rootContext()->setContextProperty("notificationManager", m_notificationManager);
         m_engine->rootContext()->setContextProperty("mdnsService", m_mdnsService);
         m_engine->rootContext()->setContextProperty("webSocketHandler", m_civetServer);
+        m_engine->rootContext()->setContextProperty("chatService", m_chatService);
 
         auto* qrCodeHelper = new QRCodeHelper(this);
         m_engine->rootContext()->setContextProperty("qrCodeHelper", qrCodeHelper);
@@ -681,6 +699,7 @@ private:
     BandwidthManager*     m_bandwidthManager = nullptr;
     CivetWebServer*       m_civetServer      = nullptr;
     mDNSService*          m_mdnsService      = nullptr;
+    ChatService*          m_chatService      = nullptr;
     NotificationManager*  m_notificationManager = nullptr;
     QSystemTrayIcon*      m_trayIcon         = nullptr;
     QQmlApplicationEngine* m_engine          = nullptr;

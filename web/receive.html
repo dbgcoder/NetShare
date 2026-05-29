@@ -163,6 +163,93 @@
         .result-icon { font-size: 48px; margin-bottom: 12px; }
         .result-text { color: var(--text-secondary); font-size: 14px; margin-bottom: 16px; }
 
+        .chat-section {
+            margin-top: 20px;
+            border-top: 1px solid var(--border);
+            padding-top: 20px;
+        }
+        .chat-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .chat-messages {
+            max-height: 200px;
+            overflow-y: auto;
+            margin-bottom: 12px;
+            background: var(--bg-primary);
+            border-radius: 8px;
+            padding: 10px;
+        }
+        .chat-msg {
+            margin-bottom: 8px;
+            font-size: 13px;
+            display: flex;
+        }
+        .chat-msg-sent {
+            justify-content: flex-end;
+        }
+        .chat-msg-received {
+            justify-content: flex-start;
+        }
+        .chat-msg-time {
+            font-size: 10px;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+        .chat-msg-text {
+            padding: 8px 14px;
+            border-radius: 14px;
+            word-break: break-word;
+            user-select: text;
+            -webkit-user-select: text;
+            line-height: 1.5;
+        }
+        .chat-msg-sent .chat-msg-text {
+            background: #4CAF50;
+            color: #fff;
+            border-bottom-right-radius: 4px;
+        }
+        .chat-msg-received .chat-msg-text {
+            background: #2a2a2a;
+            color: #e0e0e0;
+            border-bottom-left-radius: 4px;
+        }
+        .chat-input-row {
+            display: flex;
+            gap: 8px;
+        }
+        .chat-input {
+            flex: 1;
+            padding: 10px 14px;
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 14px;
+            outline: none;
+        }
+        .chat-input:focus {
+            border-color: var(--accent);
+        }
+        .chat-send-btn {
+            padding: 10px 20px;
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+            white-space: nowrap;
+        }
+        .chat-send-btn:hover { background: var(--accent-hover); }
+        .chat-send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
         .footer { text-align: center; color: var(--text-muted); font-size: 12px; margin-top: 24px; }
 
         .resume-hint {
@@ -247,6 +334,15 @@
                 <div class="result-icon">✅</div>
                 <div class="result-text" id="resultText">文件发送成功！</div>
             </div>
+
+            <div class="chat-section">
+                <div class="chat-title">💬 发送消息</div>
+                <div class="chat-messages" id="chatMessages"></div>
+                <div class="chat-input-row">
+                    <input type="text" class="chat-input" id="chatInput" placeholder="输入消息内容..." maxlength="500">
+                    <button class="chat-send-btn" id="chatSendBtn">发送</button>
+                </div>
+            </div>
         </div>
         <p class="footer">由 NetShare 提供 <span class="ws-status" id="wsStatus"><span class="ws-dot" id="wsDot"></span><span id="wsText"></span></span></p>
     </div>
@@ -308,6 +404,7 @@ function connectWebSocket() {
         if (uploadSessionId) {
             ws.send(JSON.stringify({ type: 'subscribe', data: { token: uploadSessionId } }));
         }
+        ws.send(JSON.stringify({ type: 'subscribe', data: { token: 'chat' } }));
     };
     ws.onmessage = function(e) {
         try {
@@ -324,8 +421,23 @@ function connectWebSocket() {
             } else if (msg.type === 'pause_upload') {
                 isUploading = false;
                 markAllActiveAsPaused();
+            } else if (msg.type === 'chat_message' && msg.data) {
+                if (isMsgDuplicate(msg.data.content || '', msg.data.timestamp)) {
+                    // skip echo of own sent message
+                } else {
+                    chatMessages.push({
+                        msgId: msg.data.msgId || '',
+                        content: msg.data.content || '',
+                        isSent: false,
+                        timestamp: msg.data.timestamp || new Date().toISOString(),
+                        fromUser: msg.data.fromUser || ''
+                    });
+                    renderChatMessages();
+                }
             }
-        } catch (ex) {}
+        } catch (ex) {
+            alert('[WS Error] ' + (ex.message || ex));
+        }
     };
     ws.onclose = function() {
         wsConnected = false;
@@ -341,10 +453,11 @@ function connectWebSocket() {
                     retryBtn.classList.add('active');
                 }
             }, 10000);
-            setTimeout(connectWebSocket, 5000);
         }
+        setTimeout(connectWebSocket, 5000);
     };
-    ws.onerror = function() {};
+    ws.onerror = function() {
+    };
 }
 
 function updateWsStatus(connected) {
@@ -1068,6 +1181,83 @@ async function finalize() {
         uploadBtn.disabled = false;
     }
 }
+
+// ===== Chat =====
+var chatMessages = [];
+var chatInput = document.getElementById('chatInput');
+var chatSendBtn = document.getElementById('chatSendBtn');
+var chatMessagesEl = document.getElementById('chatMessages');
+
+function renderChatMessages() {
+    chatMessagesEl.innerHTML = '';
+    chatMessages.forEach(function(m) {
+        var div = document.createElement('div');
+        div.className = 'chat-msg ' + (m.isSent ? 'chat-msg-sent' : 'chat-msg-received');
+        var timeStr = '';
+        if (m.timestamp) {
+            try { timeStr = new Date(m.timestamp).toLocaleTimeString('zh-CN', {hour:'2-digit',minute:'2-digit'}); }
+            catch(e) { timeStr = ''; }
+        }
+        var bubble = document.createElement('div');
+        bubble.style.cssText = 'display:flex;flex-direction:column;max-width:75%;' + (m.isSent ? 'align-items:flex-end;' : 'align-items:flex-start;');
+        bubble.innerHTML = '<div class="chat-msg-text">' + escapeHtml(m.content) + '</div>' +
+                        '<div class="chat-msg-time">' + timeStr + '</div>';
+        div.appendChild(bubble);
+        chatMessagesEl.appendChild(div);
+    });
+    chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+}
+
+function isMsgDuplicate(content, timestamp) {
+    if (!content || !timestamp) return false;
+    for (var i = 0; i < chatMessages.length; i++) {
+        if (chatMessages[i].content === content && chatMessages[i].isSent) {
+            var sentTime = new Date(chatMessages[i].timestamp).getTime();
+            var recvTime = new Date(timestamp).getTime();
+            if (Math.abs(sentTime - recvTime) < 5000) return true;
+        }
+    }
+    return false;
+}
+
+function sendChatMessage() {
+    var text = chatInput.value.trim();
+    if (!text) return;
+    chatInput.value = '';
+    chatSendBtn.disabled = true;
+
+    var payload = {
+        from: '',
+        fromIp: '',
+        content: text,
+        timestamp: new Date().toISOString()
+    };
+
+    fetch('/api/chat/message', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    }).then(function(resp) {
+        if (resp.ok) {
+            chatMessages.push({ content: text, isSent: true, timestamp: payload.timestamp });
+            renderChatMessages();
+        } else {
+            alert('消息发送失败');
+        }
+        chatSendBtn.disabled = false;
+    }).catch(function(err) {
+        alert('消息发送失败: ' + err.message);
+        chatSendBtn.disabled = false;
+    });
+}
+
+chatSendBtn.addEventListener('click', sendChatMessage);
+chatInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendChatMessage();
+    }
+});
 
 connectWebSocket();
 checkUnfinishedTasks();

@@ -41,6 +41,7 @@ target_link_libraries(netshare_test_sharemanager PRIVATE
     Qt6::Test
     NetshareCore
     NetshareDatabase
+    NetshareNetwork
 )
 
 # Core modules test (BandwidthManager, TransferLogService, ShareInfo)
@@ -64,6 +65,7 @@ target_link_libraries(netshare_test_core PRIVATE
     Qt6::Test
     NetshareCore
     NetshareDatabase
+    NetshareNetwork
 )
 
 # HttpServer test
