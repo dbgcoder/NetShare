@@ -123,6 +123,8 @@ public:
 
     void addCompletedTask(const TransferTask& task);
     void addUploadingTask(const TransferTask& task);
+    void addDownloadTask(const TransferTask& task);
+    QString resumeOrCreateDownloadTask(const QString& fileName, const QString& filePath, qint64 fileSize, qint64 startByte);
     void updateTaskProgress(const QString& taskId, qint64 transferredSize);
     void completeTask(const QString& taskId);
     void completeTaskByName(const QString& fileName, int type);

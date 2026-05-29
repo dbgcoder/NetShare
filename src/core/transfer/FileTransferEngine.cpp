@@ -912,6 +912,79 @@ void FileTransferEngine::addUploadingTask(const TransferTask& task)
     emit taskStarted(task.taskId);
 }
 
+void FileTransferEngine::addDownloadTask(const TransferTask& task)
+{
+    m_tasks[task.taskId] = task;
+    m_lastProgressTime[task.taskId] = QDateTime::currentMSecsSinceEpoch();
+    emit taskStarted(task.taskId);
+}
+
+QString FileTransferEngine::resumeOrCreateDownloadTask(const QString& fileName, const QString& filePath, qint64 fileSize, qint64 startByte)
+{
+    for (auto it = m_tasks.begin(); it != m_tasks.end(); ++it) {
+        if (it.value().fileName == fileName && it.value().type == TransferTask::Download) {
+            QString existingTaskId = it.key();
+            int status = it.value().status;
+
+            if (status == TransferTask::Downloading || status == TransferTask::Uploading) {
+                return existingTaskId;
+            }
+
+            if (status == TransferTask::Failed || status == TransferTask::Paused || status == TransferTask::Cancelled) {
+                auto& t = it.value();
+                t.status = TransferTask::Downloading;
+                t.transferredSize = startByte;
+                t.progress = fileSize > 0 ? static_cast<int>((startByte * 100) / fileSize) : 0;
+                t.speed = 0;
+                t.error.clear();
+                t.startedAt = QDateTime::currentDateTime();
+                m_speedHistory.remove(existingTaskId);
+                m_lastProgressTime[existingTaskId] = QDateTime::currentMSecsSinceEpoch();
+                if (m_bandwidthManager) m_bandwidthManager->removeRecord(existingTaskId);
+
+                if (m_transferLogService) {
+                    m_transferLogService->deleteLogsByFileName(fileName, TransferLogEntry::DownloadLog);
+                }
+
+                emit taskResumed(existingTaskId);
+                return existingTaskId;
+            }
+
+            if (status == TransferTask::Completed) {
+                m_tasks.remove(existingTaskId);
+                m_speedHistory.remove(existingTaskId);
+                m_lastProgressTime.remove(existingTaskId);
+                if (m_bandwidthManager) m_bandwidthManager->removeRecord(existingTaskId);
+
+                if (m_transferLogService) {
+                    m_transferLogService->deleteLogsByFileName(fileName, TransferLogEntry::DownloadLog);
+                }
+
+                emit taskDeleted(existingTaskId);
+                break;
+            }
+
+            break;
+        }
+    }
+
+    TransferTask task;
+    task.taskId = QUuid::createUuid().toString();
+    task.type = TransferTask::Download;
+    task.status = TransferTask::Downloading;
+    task.fileName = fileName;
+    task.filePath = filePath;
+    task.fileSize = fileSize;
+    task.transferredSize = startByte;
+    task.progress = fileSize > 0 ? static_cast<int>((startByte * 100) / fileSize) : 0;
+    task.speed = 0;
+    task.startedAt = QDateTime::currentDateTime();
+    m_tasks[task.taskId] = task;
+    m_lastProgressTime[task.taskId] = QDateTime::currentMSecsSinceEpoch();
+    emit taskStarted(task.taskId);
+    return task.taskId;
+}
+
 void FileTransferEngine::updateTaskProgress(const QString& taskId, qint64 transferredSize)
 {
     if (!m_tasks.contains(taskId)) return;

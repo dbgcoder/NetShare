@@ -15,6 +15,7 @@
 #include <QDir>
 #include <QMimeDatabase>
 #include <QUrl>
+#include <QUuid>
 #include <QRegularExpression>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -141,6 +142,10 @@ void RequestHandler::registerRoutes(CivetWebServer* server)
     });
 
     server->addRoute("GET", "/download/*", [this](mg_connection* conn, const HttpRequestInfo& info) {
+        return handleFileDownload(conn, info);
+    });
+
+    server->addRoute("HEAD", "/download/*", [this](mg_connection* conn, const HttpRequestInfo& info) {
         return handleFileDownload(conn, info);
     });
 
@@ -340,11 +345,71 @@ int RequestHandler::handleFileDownload(mg_connection* conn, const HttpRequestInf
     QString contentType = mimeTypeForFile(fi.fileName());
     QString rangeHeader = info.headers.value("Range");
 
-    CivetWebServer::sendStreamingFileResponse(conn, filePath, contentType, fi.fileName(), rangeHeader);
+    if (info.method == QStringLiteral("HEAD")) {
+        QByteArray ct = contentType.toUtf8();
+        if (ct.isEmpty()) ct = "application/octet-stream";
+        mg_printf(conn,
+            "HTTP/1.1 200 OK\r\n"
+            "Content-Type: %s\r\n"
+            "Content-Length: %lld\r\n"
+            "Accept-Ranges: bytes\r\n"
+            "Cache-Control: no-cache\r\n"
+            "Access-Control-Allow-Origin: *\r\n"
+            "Access-Control-Expose-Headers: Content-Length, Accept-Ranges, Content-Range\r\n"
+            "\r\n",
+            ct.constData(), fi.size());
+        return 200;
+    }
 
-    LOG_INFO("File download: %s (%lld bytes) from %s",
-             qPrintable(fi.fileName()), fi.size(), qPrintable(info.remoteAddress));
-    recordCompletedTransfer(0, fi.fileName(), fi.size(), info.remoteAddress, filePath);
+    qint64 startByte = 0;
+    if (!rangeHeader.isEmpty()) {
+        QRegularExpression rangeRe("bytes=(\\d+)-");
+        auto match = rangeRe.match(rangeHeader);
+        if (match.hasMatch()) {
+            startByte = match.captured(1).toLongLong();
+        }
+    }
+
+    QString downloadTaskId;
+    if (m_transferEngine) {
+        QString capturedFileName = fi.fileName();
+        QString capturedFilePath = filePath;
+        qint64 capturedFileSize = fi.size();
+        QMetaObject::invokeMethod(m_transferEngine, [this, &downloadTaskId, capturedFileName, capturedFilePath, capturedFileSize, startByte]() {
+            downloadTaskId = m_transferEngine->resumeOrCreateDownloadTask(capturedFileName, capturedFilePath, capturedFileSize, startByte);
+        }, Qt::BlockingQueuedConnection);
+    }
+
+    QString capturedTaskId = downloadTaskId;
+    qint64 sent = CivetWebServer::sendStreamingFileResponse(conn, filePath, contentType, fi.fileName(), rangeHeader,
+        [this, capturedTaskId](qint64 totalSent, qint64 fileSize) {
+            if (m_transferEngine && !capturedTaskId.isEmpty()) {
+                QMetaObject::invokeMethod(m_transferEngine, [this, capturedTaskId, totalSent]() {
+                    m_transferEngine->updateTaskProgress(capturedTaskId, totalSent);
+                }, Qt::QueuedConnection);
+            }
+        });
+
+    if (sent > 0 && (rangeHeader.isEmpty() ? sent == fi.size() : true)) {
+        LOG_INFO("File download: %s (%lld bytes) from %s",
+                 qPrintable(fi.fileName()), fi.size(), qPrintable(info.remoteAddress));
+        if (m_transferEngine && !downloadTaskId.isEmpty()) {
+            QMetaObject::invokeMethod(m_transferEngine, [this, downloadTaskId]() {
+                m_transferEngine->completeTask(downloadTaskId);
+            }, Qt::QueuedConnection);
+        }
+        QMetaObject::invokeMethod(this, [this, fi, info, filePath]() {
+            recordCompletedTransfer(0, fi.fileName(), fi.size(), info.remoteAddress, filePath);
+        }, Qt::QueuedConnection);
+    } else {
+        LOG_WARN("File download interrupted: %s from %s",
+                 qPrintable(fi.fileName()), qPrintable(info.remoteAddress));
+        if (m_transferEngine && !downloadTaskId.isEmpty()) {
+            QMetaObject::invokeMethod(m_transferEngine, [this, downloadTaskId]() {
+                m_transferEngine->failTask(downloadTaskId, "Download interrupted");
+            }, Qt::QueuedConnection);
+        }
+    }
 
     return 0;
 }
@@ -385,11 +450,58 @@ int RequestHandler::handleFolderDownload(mg_connection* conn, const HttpRequestI
         return 500;
     }
 
+    QFileInfo zipFi(outputPath);
     QString zipName = fi.fileName() + ".zip";
-    CivetWebServer::sendStreamingFileResponse(conn, outputPath, QStringLiteral("application/zip"),
-                                               zipName, info.headers.value("Range"));
 
-    LOG_INFO("Folder download: %s from %s", qPrintable(fi.fileName()), qPrintable(info.remoteAddress));
+    QString rangeHeader = info.headers.value("Range");
+    qint64 startByte = 0;
+    if (!rangeHeader.isEmpty()) {
+        QRegularExpression rangeRe("bytes=(\\d+)-");
+        auto match = rangeRe.match(rangeHeader);
+        if (match.hasMatch()) {
+            startByte = match.captured(1).toLongLong();
+        }
+    }
+
+    QString downloadTaskId;
+    if (m_transferEngine) {
+        QString capturedZipName = zipName;
+        QString capturedOutputPath = outputPath;
+        qint64 capturedZipSize = zipFi.size();
+        QMetaObject::invokeMethod(m_transferEngine, [this, &downloadTaskId, capturedZipName, capturedOutputPath, capturedZipSize, startByte]() {
+            downloadTaskId = m_transferEngine->resumeOrCreateDownloadTask(capturedZipName, capturedOutputPath, capturedZipSize, startByte);
+        }, Qt::BlockingQueuedConnection);
+    }
+    QString capturedTaskId = downloadTaskId;
+    qint64 sent = CivetWebServer::sendStreamingFileResponse(conn, outputPath, QStringLiteral("application/zip"),
+                                               zipName, rangeHeader,
+        [this, capturedTaskId](qint64 totalSent, qint64 fileSize) {
+            if (m_transferEngine && !capturedTaskId.isEmpty()) {
+                QMetaObject::invokeMethod(m_transferEngine, [this, capturedTaskId, totalSent]() {
+                    m_transferEngine->updateTaskProgress(capturedTaskId, totalSent);
+                }, Qt::QueuedConnection);
+            }
+        });
+
+    if (sent > 0 && (rangeHeader.isEmpty() ? sent == zipFi.size() : true)) {
+        LOG_INFO("Folder download: %s from %s", qPrintable(fi.fileName()), qPrintable(info.remoteAddress));
+        if (m_transferEngine && !downloadTaskId.isEmpty()) {
+            QMetaObject::invokeMethod(m_transferEngine, [this, downloadTaskId]() {
+                m_transferEngine->completeTask(downloadTaskId);
+            }, Qt::QueuedConnection);
+        }
+        QMetaObject::invokeMethod(this, [this, zipName, zipFi, info, outputPath]() {
+            recordCompletedTransfer(0, zipName, zipFi.size(), info.remoteAddress, outputPath);
+        }, Qt::QueuedConnection);
+    } else {
+        LOG_WARN("Folder download interrupted: %s from %s", qPrintable(fi.fileName()), qPrintable(info.remoteAddress));
+        if (m_transferEngine && !downloadTaskId.isEmpty()) {
+            QMetaObject::invokeMethod(m_transferEngine, [this, downloadTaskId]() {
+                m_transferEngine->failTask(downloadTaskId, "Download interrupted");
+            }, Qt::QueuedConnection);
+        }
+    }
+
     return 0;
 }
 
@@ -1676,9 +1788,13 @@ QByteArray RequestHandler::generateSharePage(const QString& token, const QString
                               "color:#fff;text-decoration:none;border-radius:8px;font-size:16px;font-weight:bold'>"
                               "打包下载 (ZIP)</a>").arg(token);
     } else {
-        downloadBtn = QString("<a href='/download/%1/' style='display:inline-block;padding:14px 40px;background:#e94560;"
-                              "color:#fff;text-decoration:none;border-radius:8px;font-size:16px;font-weight:bold'>"
-                              "下载文件</a>").arg(token);
+        downloadBtn = QString(
+            "<button onclick='startDownload(\"/download/%1/\")' "
+            "style='display:inline-block;padding:14px 40px;background:#e94560;"
+            "color:#fff;border:none;border-radius:8px;font-size:16px;font-weight:bold;cursor:pointer'>"
+            "下载文件</button>"
+            "<a href='/download/%1/' style='display:inline-block;margin-left:10px;padding:14px 20px;background:#333;"
+            "color:#aaa;text-decoration:none;border-radius:8px;font-size:14px'>直接下载</a>").arg(token);
     }
 
     QString fileListSection;
@@ -1695,6 +1811,21 @@ QByteArray RequestHandler::generateSharePage(const QString& token, const QString
             "<tbody>%1</tbody></table></div>").arg(fileListHtml);
     }
 
+    QString progressSection = QString(
+        "<div id='dl-progress' style='display:none;margin-top:20px;text-align:left'>"
+        "<div style='background:#1a1a2e;border-radius:8px;padding:16px'>"
+        "<div style='display:flex;justify-content:space-between;margin-bottom:8px'>"
+        "<span id='dl-status' style='color:#e94560;font-size:14px'>准备中...</span>"
+        "<span id='dl-speed' style='color:#888;font-size:14px'></span></div>"
+        "<div style='background:#0f0f23;border-radius:4px;height:8px;overflow:hidden'>"
+        "<div id='dl-bar' style='background:#e94560;height:100%;width:0%;transition:width 0.3s'></div></div>"
+        "<div style='display:flex;justify-content:space-between;margin-top:8px'>"
+        "<span id='dl-size' style='color:#888;font-size:12px'></span>"
+        "<span id='dl-percent' style='color:#888;font-size:12px'>0%</span></div>"
+        "<button id='dl-cancel-btn' onclick='cancelDownload()' "
+        "style='margin-top:12px;padding:8px 20px;background:#555;color:#fff;border:none;"
+        "border-radius:6px;font-size:13px;cursor:pointer;display:none'>取消</button></div></div>");
+
     return QString(
         "<!DOCTYPE html><html><head><meta charset='utf-8'>"
         "<meta name='viewport' content='width=device-width,initial-scale=1'>"
@@ -1708,14 +1839,81 @@ QByteArray RequestHandler::generateSharePage(const QString& token, const QString
         "<p style='color:#888;margin:0 0 24px'>%3</p>"
         "%4"
         "%5"
-        "<a href='/upload/%6' style='display:inline-block;margin-top:20px;padding:10px 28px;"
+        "%6"
+        "<a href='/upload/%7' style='display:inline-block;margin-top:20px;padding:10px 28px;"
         "background:#4caf50;color:#fff;text-decoration:none;border-radius:8px;font-size:14px'>上传文件</a>"
         "<p style='color:#444;font-size:12px;margin-top:30px'>由 NetShare 提供</p>"
-        "</div></div></body></html>")
+        "</div></div>"
+        "<script>"
+        "var dlChunks=[];var dlFileSize=0;var dlUrl='';var dlCancelled=false;var dlController=null;"
+        "function formatSize(b){if(b<1024)return b+' B';if(b<1048576)return(b/1024).toFixed(1)+' KB';return(b/1048576).toFixed(1)+' MB';}"
+        "function updateProgress(downloaded,total){"
+        "var pct=total>0?Math.round(downloaded/total*100):0;"
+        "document.getElementById('dl-bar').style.width=pct+'%%';"
+        "document.getElementById('dl-percent').textContent=pct+'%%';"
+        "document.getElementById('dl-size').textContent=formatSize(downloaded)+' / '+formatSize(total);}"
+        "function updateSpeed(bytesPerSec){"
+        "document.getElementById('dl-speed').textContent=bytesPerSec>0?formatSize(bytesPerSec)+'/s':'';}"
+        "async function startDownload(url){"
+        "dlUrl=url;dlCancelled=false;"
+        "document.getElementById('dl-progress').style.display='block';"
+        "document.getElementById('dl-cancel-btn').style.display='inline-block';"
+        "document.getElementById('dl-status').textContent='获取文件信息...';"
+        "try{"
+        "var headResp=await fetch(url,{method:'HEAD'});"
+        "if(!headResp.ok){document.getElementById('dl-status').textContent='获取文件信息失败';return;}"
+        "dlFileSize=parseInt(headResp.headers.get('Content-Length'))||0;"
+        "var acceptRanges=headResp.headers.get('Accept-Ranges');"
+        "if(acceptRanges!=='bytes'){document.getElementById('dl-status').textContent='服务器不支持断点续传，使用直接下载';window.location.href=url;return;}"
+        "if(dlFileSize>524288000){document.getElementById('dl-status').textContent='文件较大('+formatSize(dlFileSize)+')，建议使用下载管理器';}"
+        "else{document.getElementById('dl-status').textContent='文件大小: '+formatSize(dlFileSize);}"
+        "await resumeDownload();"
+        "}catch(e){document.getElementById('dl-status').textContent='错误: '+e.message;}}"
+        "async function resumeDownload(){"
+        "var downloaded=0;for(var i=0;i<dlChunks.length;i++){var buf=await dlChunks[i].arrayBuffer();downloaded+=buf.byteLength;}"
+        "if(downloaded>=dlFileSize&&dlFileSize>0){saveFile();return;}"
+        "dlController=new AbortController();"
+        "var headers={};if(downloaded>0){headers['Range']='bytes='+downloaded+'-';}"
+        "document.getElementById('dl-status').textContent=downloaded>0?'续传中... ('+formatSize(downloaded)+' 已下载)':'下载中...';"
+        "updateProgress(downloaded,dlFileSize);"
+        "var lastTime=Date.now();var lastDownloaded=downloaded;"
+        "try{"
+        "var resp=await fetch(dlUrl,{headers:headers,signal:dlController.signal});"
+        "if(!resp.ok&&(resp.status!==206)){document.getElementById('dl-status').textContent='下载失败: HTTP '+resp.status;return;}"
+        "var reader=resp.body.getReader();"
+        "while(true){"
+        "if(dlCancelled)break;"
+        "var result=await reader.read();"
+        "if(result.done)break;"
+        "dlChunks.push(result.value);"
+        "downloaded=0;for(var i=0;i<dlChunks.length;i++){downloaded+=dlChunks[i].byteLength;}"
+        "var now=Date.now();var dt=now-lastTime;"
+        "if(dt>=500){var speed=(downloaded-lastDownloaded)*1000/dt;updateSpeed(speed);lastTime=now;lastDownloaded=downloaded;}"
+        "updateProgress(downloaded,dlFileSize);}"
+        "if(!dlCancelled){"
+        "if(dlFileSize>0&&downloaded>=dlFileSize){saveFile();}"
+        "else if(dlFileSize<=0&&result.done){dlFileSize=downloaded;saveFile();}"
+        "else{document.getElementById('dl-status').textContent='下载中断，点击下载按钮继续';}}"
+        "else{document.getElementById('dl-status').textContent='已取消，点击下载按钮继续';}"
+        "}catch(e){"
+        "if(e.name==='AbortError'){document.getElementById('dl-status').textContent='已取消，点击下载按钮继续';}"
+        "else{document.getElementById('dl-status').textContent='下载中断: '+e.message+'，点击下载按钮继续';}}}"
+        "function saveFile(){"
+        "document.getElementById('dl-status').textContent='保存中...';"
+        "var blob=new Blob(dlChunks);var url=URL.createObjectURL(blob);"
+        "var a=document.createElement('a');a.href=url;"
+        "var name=dlUrl.split('/').filter(function(s){return s.length>0}).pop()||'download';"
+        "a.download=decodeURIComponent(name);a.click();"
+        "setTimeout(function(){URL.revokeObjectURL(url);},10000);"
+        "document.getElementById('dl-status').textContent='下载完成!';"
+        "updateProgress(dlFileSize,dlFileSize);dlChunks=[];}"
+        "function cancelDownload(){dlCancelled=true;if(dlController)dlController.abort();}"
+        "</script></body></html>")
         .arg(folderName)
         .arg(isFolder ? "\xf0\x9f\x93\x82" : "\xf0\x9f\x93\x84")
         .arg(isFolder ? "文件夹分享" : "文件分享")
         .arg(downloadBtn)
+        .arg(progressSection)
         .arg(fileListSection)
         .arg(token)
         .toUtf8();

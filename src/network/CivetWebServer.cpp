@@ -291,14 +291,15 @@ void CivetWebServer::sendFileResponse(mg_connection* conn, const QString& filePa
     mg_send_file(conn, filePath.toUtf8().constData());
 }
 
-void CivetWebServer::sendStreamingFileResponse(mg_connection* conn, const QString& filePath,
+qint64 CivetWebServer::sendStreamingFileResponse(mg_connection* conn, const QString& filePath,
                                                 const QString& mimeType, const QString& fileName,
-                                                const QString& rangeHeader)
+                                                const QString& rangeHeader,
+                                                std::function<void(qint64 totalSent, qint64 fileSize)> progressCallback)
 {
     QFile file(filePath);
     if (!file.open(QIODevice::ReadOnly)) {
         sendHtmlResponse(conn, 404, QByteArrayLiteral("File not found"));
-        return;
+        return -1;
     }
 
     qint64 fileSize = file.size();
@@ -319,7 +320,7 @@ void CivetWebServer::sendStreamingFileResponse(mg_connection* conn, const QStrin
                     "HTTP/1.1 416 Range Not Satisfiable\r\n"
                     "Content-Range: bytes */%lld\r\n"
                     "Content-Length: 0\r\n\r\n", fileSize);
-                return;
+                return -1;
             }
             if (endByte >= fileSize) endByte = fileSize - 1;
         }
@@ -339,6 +340,8 @@ void CivetWebServer::sendStreamingFileResponse(mg_connection* conn, const QStrin
             "Content-Disposition: attachment; filename=\"%s\"\r\n"
             "Accept-Ranges: bytes\r\n"
             "Cache-Control: no-cache\r\n"
+            "Access-Control-Allow-Origin: *\r\n"
+            "Access-Control-Expose-Headers: Content-Length, Accept-Ranges, Content-Range\r\n"
             "\r\n",
             contentType.constData(), contentLength,
             startByte, endByte, fileSize,
@@ -351,6 +354,8 @@ void CivetWebServer::sendStreamingFileResponse(mg_connection* conn, const QStrin
             "Content-Disposition: attachment; filename=\"%s\"\r\n"
             "Accept-Ranges: bytes\r\n"
             "Cache-Control: no-cache\r\n"
+            "Access-Control-Allow-Origin: *\r\n"
+            "Access-Control-Expose-Headers: Content-Length, Accept-Ranges, Content-Range\r\n"
             "\r\n",
             contentType.constData(), contentLength,
             utfFileName.constData());
@@ -359,13 +364,20 @@ void CivetWebServer::sendStreamingFileResponse(mg_connection* conn, const QStrin
     file.seek(startByte);
     char buf[65536];
     qint64 remaining = contentLength;
+    qint64 totalSent = 0;
     while (remaining > 0) {
         int toRead = static_cast<int>(qMin(remaining, static_cast<qint64>(sizeof(buf))));
         int bytesRead = static_cast<int>(file.read(buf, toRead));
         if (bytesRead <= 0) break;
-        mg_write(conn, buf, bytesRead);
-        remaining -= bytesRead;
+        int written = mg_write(conn, buf, bytesRead);
+        if (written <= 0) return -1;
+        totalSent += written;
+        remaining -= written;
+        if (progressCallback) {
+            progressCallback(startByte + totalSent, fileSize);
+        }
     }
+    return totalSent;
 }
 
 HttpRequestInfo CivetWebServer::fromCivetWeb(mg_connection* conn, const mg_request_info* ri)
@@ -449,7 +461,7 @@ int CivetWebServer::beginRequestHandler(mg_connection* conn)
         mg_printf(conn,
                   "HTTP/1.1 204 No Content\r\n"
                   "Access-Control-Allow-Origin: *\r\n"
-                  "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n"
+                  "Access-Control-Allow-Methods: GET, HEAD, POST, OPTIONS\r\n"
                   "Access-Control-Allow-Headers: Content-Type, Range\r\n"
                   "Access-Control-Max-Age: 86400\r\n"
                   "\r\n");

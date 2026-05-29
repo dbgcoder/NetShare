@@ -67,9 +67,10 @@ public:
     static void sendHtmlResponse(mg_connection* conn, int status, const QByteArray& html);
     static void sendFileResponse(mg_connection* conn, const QString& filePath,
                                   const QString& mimeType, const QString& fileName);
-    static void sendStreamingFileResponse(mg_connection* conn, const QString& filePath,
+    static qint64 sendStreamingFileResponse(mg_connection* conn, const QString& filePath,
                                            const QString& mimeType, const QString& fileName,
-                                           const QString& rangeHeader);
+                                           const QString& rangeHeader,
+                                           std::function<void(qint64 totalSent, qint64 fileSize)> progressCallback = nullptr);
     static HttpRequestInfo fromCivetWeb(mg_connection* conn, const mg_request_info* ri);
 
 signals:
