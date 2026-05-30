@@ -11,7 +11,7 @@ echo === NetShare Package Script ===
 echo.
 
 REM Check build exists
-if not exist "%BUILD_DIR%\src\NetShare.exe" (
+if not exist "%BUILD_DIR%\src\Release\NetShare.exe" (
     echo ERROR: NetShare.exe not found in build directory
     echo Please build the project first
     exit /b 1
@@ -28,11 +28,46 @@ mkdir "%PACKAGE_DIR%"
 
 REM Copy main executable
 echo Copying NetShare.exe...
-copy "%BUILD_DIR%\src\NetShare.exe" "%PACKAGE_DIR%\" >nul
+copy "%BUILD_DIR%\src\Release\NetShare.exe" "%PACKAGE_DIR%\" >nul
 
 REM Run windeployqt
 echo Running windeployqt...
-"%QT_DIR%\bin\windeployqt.exe" --release --no-translations --no-opengl-sw --dir "%PACKAGE_DIR%" "%PACKAGE_DIR%\NetShare.exe"
+"%QT_DIR%\bin\windeployqt.exe" --release --no-translations --no-opengl-sw --no-virtualkeyboard --no-svg --qmldir "%PROJECT_ROOT%\src\gui\qml" --dir "%PACKAGE_DIR%" "%PACKAGE_DIR%\NetShare.exe"
+
+REM ===== Slim down package (medium plan) =====
+echo Removing unused components...
+
+REM 1. Remove unused Quick Controls styles (only Basic is needed)
+rmdir /s /q "%PACKAGE_DIR%\qml\QtQuick\Controls\FluentWinUI3"
+rmdir /s /q "%PACKAGE_DIR%\qml\QtQuick\Controls\Material"
+rmdir /s /q "%PACKAGE_DIR%\qml\QtQuick\Controls\Imagine"
+rmdir /s /q "%PACKAGE_DIR%\qml\QtQuick\Controls\Universal"
+rmdir /s /q "%PACKAGE_DIR%\qml\QtQuick\Controls\Fusion"
+rmdir /s /q "%PACKAGE_DIR%\qml\QtQuick\Controls\Windows"
+rmdir /s /q "%PACKAGE_DIR%\qml\QtQuick\NativeStyle"
+
+REM 2. Remove QML debugging tools (not needed in Release)
+rmdir /s /q "%PACKAGE_DIR%\qmltooling"
+
+REM 3. Remove unused SQL drivers (only QSQLITE is needed)
+del /q "%PACKAGE_DIR%\sqldrivers\qsqlmimer.dll"
+del /q "%PACKAGE_DIR%\sqldrivers\qsqlodbc.dll"
+del /q "%PACKAGE_DIR%\sqldrivers\qsqlpsql.dll"
+
+REM 4. Remove unused image format plugins (only qjpeg is needed)
+del /q "%PACKAGE_DIR%\imageformats\qwebp.dll"
+del /q "%PACKAGE_DIR%\imageformats\qtiff.dll"
+del /q "%PACKAGE_DIR%\imageformats\qicns.dll"
+del /q "%PACKAGE_DIR%\imageformats\qgif.dll"
+del /q "%PACKAGE_DIR%\imageformats\qico.dll"
+del /q "%PACKAGE_DIR%\imageformats\qsvg.dll"
+del /q "%PACKAGE_DIR%\imageformats\qtga.dll"
+del /q "%PACKAGE_DIR%\imageformats\qwbmp.dll"
+
+REM 5. Remove Qt6VirtualKeyboard (desktop app doesn't need it)
+del /q "%PACKAGE_DIR%\Qt6VirtualKeyboard.dll"
+
+echo Done removing unused components.
 
 REM Copy web assets
 echo Copying web assets...

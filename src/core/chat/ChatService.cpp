@@ -249,7 +249,7 @@ void ChatService::onMessageReceived(const QString& fromUser, const QString& from
     if (msg.fromUser.isEmpty()) {
         QStringList parts = pureIp.split(QStringLiteral("."));
         QString suffix = parts.isEmpty() ? pureIp : parts.last();
-        msg.fromUser = QStringLiteral("移动端-%1").arg(suffix);
+        msg.fromUser = tr("Mobile-%1").arg(suffix);
     }
     msg.toUser = m_localDeviceName;
     msg.content = content;
@@ -367,7 +367,7 @@ void ChatService::updateAnonymousUser(const QString& remoteAddress, const QStrin
     if (displayName.isEmpty()) {
         QStringList parts = remoteAddress.split(QStringLiteral("."));
         QString suffix = parts.isEmpty() ? remoteAddress : parts.last();
-        displayName = QStringLiteral("移动端-%1").arg(suffix);
+        displayName = tr("Mobile-%1").arg(suffix);
     }
 
     auto it = m_anonymousUsers.find(remoteAddress);

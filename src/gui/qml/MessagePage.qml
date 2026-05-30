@@ -390,7 +390,7 @@ Rectangle {
                                         var ts = model.timestamp
                                         if (ts.length > 19) ts = ts.substring(11, 19)
                                         else if (ts.length > 10) ts = ts.substring(11)
-                                        if (model.sendFailed) return ts + " ⚠ 发送失败"
+                                        if (model.sendFailed) return ts + " ⚠ " + qsTr("Send failed")
                                         return ts
                                     }
                                     font.pixelSize: 10

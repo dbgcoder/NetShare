@@ -49,14 +49,14 @@ void NotificationManager::notifyDownloadComplete(const QString& fileName, const 
 {
     m_lastAction = "openFolder";
     m_lastData = savePath;
-    notify("下载完成", QString("文件 %1 已下载完成").arg(fileName), Normal);
+    notify(tr("Download Complete"), tr("File %1 downloaded").arg(fileName), Normal);
 }
 
 void NotificationManager::notifyUploadComplete(const QString& fileName)
 {
     m_lastAction = "uploadComplete";
     m_lastData = fileName;
-    notify("上传完成", QString("文件 %1 已上传完成").arg(fileName), Normal);
+    notify(tr("Upload Complete"), tr("File %1 uploaded").arg(fileName), Normal);
 }
 
 void NotificationManager::notifyShareCreated(const QString& token, const QString& filePath)
@@ -64,14 +64,14 @@ void NotificationManager::notifyShareCreated(const QString& token, const QString
     m_lastAction = "shareCreated";
     m_lastData = token;
     QFileInfo fi(filePath);
-    notify("分享已创建", QString("已分享: %1").arg(fi.fileName()), Normal);
+    notify(tr("Share Created"), tr("Shared: %1").arg(fi.fileName()), Normal);
 }
 
 void NotificationManager::notifyShareAccessed(const QString& token, const QString& address)
 {
     m_lastAction = "shareAccessed";
     m_lastData = token;
-    notify("分享被访问", QString("来自 %1 的访问").arg(address), Low);
+    notify(tr("Share Accessed"), tr("Access from %1").arg(address), Low);
 }
 
 void NotificationManager::notifyError(const QString& title, const QString& error)

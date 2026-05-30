@@ -17,6 +17,8 @@
 #include <QSplashScreen>
 #include <QTimer>
 #include <QDebug>
+#include <QTranslator>
+#include <QLocale>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonDocument>
@@ -118,6 +120,8 @@ public:
             LOG_ERROR("Failed to initialize settings");
             return false;
         }
+
+        loadTranslator();
 
         if (!initializeCoreServices()) {
             LOG_ERROR("Failed to initialize core services");
@@ -225,6 +229,42 @@ private:
         }
         LOG_INFO("Settings loaded successfully");
         return true;
+    }
+
+    void loadTranslator()
+    {
+        int langIndex = m_settings->value("General/Language", 0).toInt();
+
+        QString qmName;
+        if (langIndex == 1) {
+            qmName = QStringLiteral("netshare_en");
+        } else {
+            qmName = QStringLiteral("netshare_zh_CN");
+        }
+
+        m_translator = new QTranslator(this);
+        QString qrcPath = QStringLiteral(":/i18n/%1.qm").arg(qmName);
+        if (m_translator->load(qrcPath)) {
+            QCoreApplication::installTranslator(m_translator);
+            LOG_INFO("Translator loaded from QRC: %s", qPrintable(qrcPath));
+            return;
+        }
+
+        QString qmDir;
+#ifdef Q_OS_WIN
+        qmDir = QCoreApplication::applicationDirPath() + "/i18n";
+#else
+        qmDir = QCoreApplication::applicationDirPath() + "/../share/netshare/i18n";
+#endif
+        if (m_translator->load(qmName, qmDir)) {
+            QCoreApplication::installTranslator(m_translator);
+            LOG_INFO("Translator loaded from file: %s/%s.qm", qPrintable(qmDir), qPrintable(qmName));
+            return;
+        }
+
+        LOG_WARN("Failed to load translator: %s", qPrintable(qmName));
+        delete m_translator;
+        m_translator = nullptr;
     }
 
     bool initializeCoreServices()
@@ -594,11 +634,13 @@ private:
 
         menu->addSeparator();
 
-        QAction* sharesAction = new QAction(tr("我的分享"), menu);
+        QAction* sharesAction = new QAction(tr("分享"), menu);
         connect(sharesAction, &QAction::triggered, this, &NetShareApplication::onShowShares);
         menu->addAction(sharesAction);
 
-        QAction* transfersAction = new QAction(tr("传输列表"), menu);
+        menu->addSeparator();
+
+        QAction* transfersAction = new QAction(tr("传输"), menu);
         connect(transfersAction, &QAction::triggered, this, &NetShareApplication::onShowTransfers);
         menu->addAction(transfersAction);
 
@@ -649,8 +691,22 @@ private slots:
     void onTrayIconActivated(QSystemTrayIcon::ActivationReason reason)
     {
         if (reason == QSystemTrayIcon::Trigger || reason == QSystemTrayIcon::DoubleClick) {
-            onShowMainWindow();
+            if (m_mainWindow && m_mainWindow->isVisible()) {
+                m_mainWindow->hide();
+                LOG_DEBUG("Main window hidden by tray click");
+            } else {
+                onShowMainWindow();
+            }
         }
+    }
+
+    void navigateToPage(int pageIndex)
+    {
+        if (!m_engine || m_engine->rootObjects().isEmpty()) return;
+        QObject* rootObj = m_engine->rootObjects().first();
+        QMetaObject::invokeMethod(rootObj, "switchToPage",
+            Qt::DirectConnection,
+            Q_ARG(QVariant, QVariant(pageIndex)));
     }
 
     void onShowMainWindow()
@@ -666,16 +722,19 @@ private slots:
     void onShowShares()
     {
         LOG_DEBUG("Show shares requested");
+        navigateToPage(0);
     }
 
     void onShowTransfers()
     {
         LOG_DEBUG("Show transfers requested");
+        navigateToPage(2);
     }
 
     void onShowSettings()
     {
         LOG_DEBUG("Show settings requested");
+        navigateToPage(4);
     }
 
     void onQuit()
@@ -703,6 +762,7 @@ private:
     NotificationManager*  m_notificationManager = nullptr;
     QSystemTrayIcon*      m_trayIcon         = nullptr;
     QQmlApplicationEngine* m_engine          = nullptr;
+    QTranslator*          m_translator       = nullptr;
     QWindow*              m_mainWindow       = nullptr;
 
     void buildInjector()

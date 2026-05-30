@@ -46,6 +46,11 @@ qt_add_qml_module(${NETSHARE_GUI_MODULE_NAME}
         qml/DeviceDiscovery.qml
         qml/SettingsPage.qml
         qml/MessagePage.qml
+    RESOURCES
+        qml/icons/send.svg
+        qml/icons/receive.svg
+        qml/icons/transfer.svg
+        qml/icons/lan.svg
 )
 
 # =============================================================================

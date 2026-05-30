@@ -8,6 +8,14 @@ set(APP_SOURCES main.cpp)
 
 qt_add_executable(NetShare ${APP_SOURCES})
 
+qt_add_translations(NetShare
+    TS_FILES
+        gui/translations/netshare_zh_CN.ts
+        gui/translations/netshare_en.ts
+    LUPDATE_OPTIONS -no-obsolete
+    LRELEASE_OPTIONS -compress -removeidentical
+)
+
 target_include_directories(NetShare PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/../third_party/boost-di

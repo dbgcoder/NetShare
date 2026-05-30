@@ -26,13 +26,14 @@ Rectangle {
         for (var i = 0; i < services.length; i++) {
             var s = services[i]
             deviceModel.append({
-                name: s.name || "未知设备",
+                name: s.name || qsTr("Unknown device"),
                 address: s.address || "--",
                 port: s.port || 0,
-                status: "在线"
+                status: qsTr("Online"),
+                isLocal: false
             })
         }
-        deviceCountLabel.text = "发现 " + deviceModel.count + " 个设备"
+        deviceCountLabel.text = qsTr("Found %1 devices").arg(deviceModel.count)
     }
 
     Component.onCompleted: {
@@ -42,12 +43,13 @@ Rectangle {
     function addLocalDevice() {
         var ip = typeof shareManager !== 'undefined' ? shareManager.localIp : "127.0.0.1"
         deviceModel.append({
-            name: "本机",
-            address: ip,
-            port: 8080,
-            status: "本机"
+                name: qsTr("This PC"),
+                address: ip,
+                port: 8080,
+                status: qsTr("This PC"),
+                isLocal: true
         })
-        deviceCountLabel.text = "发现 " + deviceModel.count + " 个设备"
+        deviceCountLabel.text = qsTr("Found %1 devices").arg(deviceModel.count)
     }
 
     ColumnLayout {
@@ -59,7 +61,7 @@ Rectangle {
             Layout.fillWidth: true
 
             Label {
-                text: "发现设备"
+                text: qsTr("Device Discovery")
                 font.pixelSize: 24
                 font.bold: true
                 color: Theme.textColor
@@ -69,7 +71,7 @@ Rectangle {
 
             Button {
                 id: scanButton
-                text: scanTimer.running ? "停止扫描" : "扫描设备"
+                text: scanTimer.running ? qsTr("Stop Scan") : qsTr("Scan Devices")
 
                 contentItem: Label {
                     text: parent.text
@@ -106,7 +108,7 @@ Rectangle {
 
                 Label {
                     anchors.centerIn: parent
-                    text: "全部"
+                    text: qsTr("All")
                     color: "#ffffff"
                     font.pixelSize: 12
                 }
@@ -116,7 +118,7 @@ Rectangle {
 
             Label {
                 id: deviceCountLabel
-                text: "发现 1 个设备"
+                text: qsTr("Found 1 device")
                 color: Theme.textSecondary
                 font.pixelSize: 13
             }
@@ -146,7 +148,7 @@ Rectangle {
 
                 Label {
                     anchors.centerIn: parent
-                    text: "暂未发现其他设备\n点击\"扫描设备\"搜索局域网"
+                    text: qsTr("No other devices found\nClick \"Scan Devices\" to search LAN")
                     color: Theme.textSecondary
                     font.pixelSize: 14
                     horizontalAlignment: Text.AlignHCenter
@@ -174,11 +176,11 @@ Rectangle {
                             Layout.preferredWidth: 44
                             Layout.preferredHeight: 44
                             radius: 22
-                            color: model.status === "本机" ? Theme.accentColor : Theme.successColor
+                            color: model.isLocal ? Theme.accentColor : Theme.successColor
 
                             Label {
                                 anchors.centerIn: parent
-                                text: model.status === "本机" ? "🖥" : "💻"
+                                text: model.isLocal ? "🖥" : "💻"
                                 font.pixelSize: 20
                             }
                         }
@@ -204,7 +206,7 @@ Rectangle {
                         Rectangle {
                             Layout.preferredHeight: 24
                             Layout.preferredWidth: 48
-                            color: model.status === "本机" ? Theme.accentColor : Theme.successColor
+                            color: model.isLocal ? Theme.accentColor : Theme.successColor
                             radius: 12
 
                             Label {
@@ -216,7 +218,7 @@ Rectangle {
                         }
 
                         Button {
-                            visible: model.status !== "本机"
+                            visible: !model.isLocal
                             implicitWidth: 28
                             implicitHeight: 28
                             contentItem: Label {
@@ -228,7 +230,7 @@ Rectangle {
                                 color: parent.hovered ? "#3e3e42" : "transparent"
                                 radius: 4
                             }
-                            ToolTip.text: "在浏览器中打开"
+                            ToolTip.text: qsTr("Open in browser")
                             ToolTip.visible: hovered
                             onClicked: {
                                 Qt.openUrlExternally("http://" + model.address + ":" + model.port)
@@ -250,7 +252,7 @@ Rectangle {
                 anchors.margins: 12
 
                 Label {
-                    text: "💡 提示：确保设备在同一局域网内，且对方已启动 NetShare"
+                    text: qsTr("💡 Tip: Make sure devices are on the same LAN and NetShare is running on the other device")
                     color: Theme.textSecondary
                     font.pixelSize: 12
                 }
@@ -258,7 +260,7 @@ Rectangle {
                 Item { Layout.fillWidth: true }
 
                 Label {
-                    text: scanTimer.running ? "扫描中..." : "就绪"
+                    text: scanTimer.running ? qsTr("Scanning...") : qsTr("Ready")
                     color: scanTimer.running ? Theme.accentColor : Theme.textSecondary
                     font.pixelSize: 12
                 }

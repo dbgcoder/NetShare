@@ -68,6 +68,8 @@ Rectangle {
         generalMinimizeTray.checked = sm().getBool("General/MinimizeToTray", true)
         generalNotify.checked = sm().getBool("General/ShowNotifications", true)
         generalLangCombo.currentIndex = sm().getInt("General/Language", 0)
+        generalLangCombo.originalLangIndex = generalLangCombo.currentIndex
+        generalLangCombo.ready = true
 
         networkPortField.text = sm().getString("Network/Port", "8080")
         networkMaxConnField.text = sm().getString("Network/MaxConnections", "10")
@@ -119,7 +121,7 @@ Rectangle {
                 spacing: 4
 
                 Label {
-                    text: "设置"
+                    text: qsTr("Settings")
                     font.pixelSize: 20
                     font.bold: true
                     color: Theme.textColor
@@ -128,12 +130,12 @@ Rectangle {
 
                 Repeater {
                     model: [
-                        { title: "常规", icon: "⚙️" },
-                        { title: "网络", icon: "🌐" },
-                        { title: "安全", icon: "🔒" },
-                        { title: "传输日志", icon: "📋" },
-                        { title: "带宽控制", icon: "📊" },
-                        { title: "TLS/HTTPS", icon: "🔐" }
+                        { title: qsTr("General"), icon: "⚙️" },
+                        { title: qsTr("Network"), icon: "🌐" },
+                        { title: qsTr("Security"), icon: "🔒" },
+                        { title: qsTr("Transfer Log"), icon: "📋" },
+                        { title: qsTr("Bandwidth"), icon: "📊" },
+                        { title: qsTr("TLS/HTTPS"), icon: "🔐" }
                     ]
                     delegate: Rectangle {
                         Layout.fillWidth: true
@@ -232,7 +234,7 @@ Rectangle {
                     spacing: 20
 
                     Label {
-                        text: "常规设置"
+                        text: qsTr("General Settings")
                         font.pixelSize: 20
                         font.bold: true
                         color: Theme.textColor
@@ -245,7 +247,7 @@ Rectangle {
                         columnSpacing: 16
 
                         Label {
-                            text: "设备名称"
+                            text: qsTr("Device Name")
                             color: Theme.textColor
                             font.pixelSize: 14
                             Layout.alignment: Qt.AlignVCenter
@@ -254,7 +256,7 @@ Rectangle {
                         TextField {
                             id: generalNameField
                             Layout.fillWidth: true
-                            placeholderText: "输入设备名称"
+                            placeholderText: qsTr("Enter device name")
                             color: Theme.textColor
                             font.pixelSize: 14
 
@@ -268,7 +270,7 @@ Rectangle {
                         }
 
                         Label {
-                            text: "语言"
+                            text: qsTr("Language")
                             color: Theme.textColor
                             font.pixelSize: 14
                             Layout.alignment: Qt.AlignVCenter
@@ -277,14 +279,21 @@ Rectangle {
                         ThemedComboBox {
                             id: generalLangCombo
                             Layout.fillWidth: true
+                            property int originalLangIndex: 0
+                            property bool ready: false
                             model: ["简体中文", "English"]
-                            font.pixelSize: 14
 
-                            onCurrentIndexChanged: saveSetting("General/Language", currentIndex)
+                            onCurrentIndexChanged: {
+                                if (!ready) return
+                                saveSetting("General/Language", currentIndex)
+                                if (currentIndex !== originalLangIndex) {
+                                    restartHintDialog.open()
+                                }
+                            }
                         }
 
                         Label {
-                            text: "开机自启"
+                            text: qsTr("Auto Start")
                             color: Theme.textColor
                             font.pixelSize: 14
                             Layout.alignment: Qt.AlignVCenter
@@ -296,7 +305,7 @@ Rectangle {
                         }
 
                         Label {
-                            text: "最小化到托盘"
+                            text: qsTr("Minimize to Tray")
                             color: Theme.textColor
                             font.pixelSize: 14
                             Layout.alignment: Qt.AlignVCenter
@@ -309,7 +318,7 @@ Rectangle {
                         }
 
                         Label {
-                            text: "显示通知"
+                            text: qsTr("Show Notifications")
                             color: Theme.textColor
                             font.pixelSize: 14
                             Layout.alignment: Qt.AlignVCenter
@@ -329,7 +338,7 @@ Rectangle {
                     spacing: 20
 
                     Label {
-                        text: "网络设置"
+                        text: qsTr("Network Settings")
                         font.pixelSize: 20
                         font.bold: true
                         color: Theme.textColor
@@ -342,7 +351,7 @@ Rectangle {
                         columnSpacing: 16
 
                         Label {
-                            text: "服务端口"
+                            text: qsTr("Service Port")
                             color: Theme.textColor
                             font.pixelSize: 14
                             Layout.alignment: Qt.AlignVCenter
@@ -366,7 +375,7 @@ Rectangle {
                         }
 
                         Label {
-                            text: "最大连接数"
+                            text: qsTr("Max Connections")
                             color: Theme.textColor
                             font.pixelSize: 14
                             Layout.alignment: Qt.AlignVCenter
@@ -390,7 +399,7 @@ Rectangle {
                         }
 
                         Label {
-                            text: "带宽限制 (KB/s)"
+                            text: qsTr("Bandwidth Limit (KB/s)")
                             color: Theme.textColor
                             font.pixelSize: 14
                             Layout.alignment: Qt.AlignVCenter
@@ -399,7 +408,7 @@ Rectangle {
                         TextField {
                             id: networkBandwidthField
                             Layout.fillWidth: true
-                            placeholderText: "0 = 不限制"
+                            placeholderText: qsTr("0 = Unlimited")
                             color: Theme.textColor
                             font.pixelSize: 14
                             validator: IntValidator { bottom: 0; top: 999999 }
@@ -414,7 +423,7 @@ Rectangle {
                         }
 
                         Label {
-                            text: "自动检测IP"
+                            text: qsTr("Auto Detect IP")
                             color: Theme.textColor
                             font.pixelSize: 14
                             Layout.alignment: Qt.AlignVCenter
@@ -430,7 +439,7 @@ Rectangle {
                         }
 
                         Label {
-                            text: "手动IP地址"
+                            text: qsTr("Manual IP Address")
                             color: Theme.textColor
                             font.pixelSize: 14
                             Layout.alignment: Qt.AlignVCenter
@@ -464,7 +473,7 @@ Rectangle {
                     spacing: 20
 
                     Label {
-                        text: "安全设置"
+                        text: qsTr("Security Settings")
                         font.pixelSize: 20
                         font.bold: true
                         color: Theme.textColor
@@ -477,7 +486,7 @@ Rectangle {
                         columnSpacing: 16
 
                         Label {
-                            text: "访问密码"
+                            text: qsTr("Access Password")
                             color: Theme.textColor
                             font.pixelSize: 14
                             Layout.alignment: Qt.AlignVCenter
@@ -492,7 +501,7 @@ Rectangle {
                         }
 
                         Label {
-                            text: "密码"
+                            text: qsTr("Password")
                             color: Theme.textColor
                             font.pixelSize: 14
                             Layout.alignment: Qt.AlignVCenter
@@ -503,7 +512,7 @@ Rectangle {
                         TextField {
                             id: securityPasswordField
                             Layout.fillWidth: true
-                            placeholderText: "设置访问密码"
+                            placeholderText: qsTr("Set access password")
                             echoMode: TextInput.Password
                             color: Theme.textColor
                             font.pixelSize: 14
@@ -520,7 +529,7 @@ Rectangle {
                         }
 
                         Label {
-                            text: "允许上传"
+                            text: qsTr("Allow Upload")
                             color: Theme.textColor
                             font.pixelSize: 14
                             Layout.alignment: Qt.AlignVCenter
@@ -533,7 +542,7 @@ Rectangle {
                         }
 
                         Label {
-                            text: "允许删除"
+                            text: qsTr("Allow Delete")
                             color: Theme.textColor
                             font.pixelSize: 14
                             Layout.alignment: Qt.AlignVCenter
@@ -545,7 +554,7 @@ Rectangle {
                         }
 
                         Label {
-                            text: "访问日志"
+                            text: qsTr("Access Log")
                             color: Theme.textColor
                             font.pixelSize: 14
                             Layout.alignment: Qt.AlignVCenter
@@ -564,7 +573,7 @@ Rectangle {
                         Layout.fillWidth: true
 
                         Button {
-                            text: "恢复默认设置"
+                            text: qsTr("Reset to Defaults")
                             contentItem: Label {
                                 text: parent.text
                                 color: Theme.errorColor
@@ -594,7 +603,7 @@ Rectangle {
                         spacing: 12
 
                         Label {
-                            text: "传输日志"
+                            text: qsTr("Transfer Log")
                             font.pixelSize: 20
                             font.bold: true
                             color: Theme.textColor
@@ -603,18 +612,18 @@ Rectangle {
                         Item { Layout.fillWidth: true }
 
                         Label {
-                            text: "共 " + logListView.count + " 条"
+                            text: qsTr("Total %1 entries").arg(logListView.count)
                             color: Theme.textSecondary
                             font.pixelSize: 13
                         }
 
                         ThemedButton {
-                            text: "刷新"
+                            text: qsTr("Refresh")
                             onClicked: refreshLogs()
                         }
 
                         ThemedButton {
-                            text: "导出"
+                            text: qsTr("Export")
                             onClicked: {
                                 if (typeof transferLogService !== 'undefined')
                                     transferLogService.exportLogs("NetShare_transfer_logs.json")
@@ -622,7 +631,7 @@ Rectangle {
                         }
 
                         ThemedButton {
-                            text: "清空"
+                            text: qsTr("Clear")
                             onClicked: {
                                 if (typeof transferLogService !== 'undefined')
                                     transferLogService.clearLogs(0)
@@ -638,7 +647,7 @@ Rectangle {
 
                         ComboBox {
                             id: logTypeFilter
-                            model: ["全部", "下载", "上传"]
+                            model: [qsTr("All"), qsTr("Download"), qsTr("Upload")]
                             font.pixelSize: 13
                             Layout.preferredWidth: 100
                             onCurrentIndexChanged: refreshLogs()
@@ -672,7 +681,7 @@ Rectangle {
                         TextField {
                             id: logSearchField
                             Layout.fillWidth: true
-                            placeholderText: "搜索文件名或地址..."
+                            placeholderText: qsTr("Search file name or address...")
                             color: Theme.textColor
                             font.pixelSize: 13
                             onTextChanged: refreshLogs()
@@ -698,22 +707,22 @@ Rectangle {
                             anchors.rightMargin: 16
 
                             Label {
-                                text: "📊 统计:"
+                                text: qsTr("📊 Statistics:")
                                 color: Theme.textSecondary
                                 font.pixelSize: 13
                             }
                             Label {
-                                text: "下载 " + logDownloadCount + " 次"
+                                text: qsTr("Download %1 times").arg(logDownloadCount)
                                 color: Theme.accentColor
                                 font.pixelSize: 13
                             }
                             Label {
-                                text: "上传 " + logUploadCount + " 次"
+                                text: qsTr("Upload %1 times").arg(logUploadCount)
                                 color: Theme.successColor
                                 font.pixelSize: 13
                             }
                             Label {
-                                text: "总传输 " + formatBytes(logTotalBytes)
+                                text: qsTr("Total transfer %1").arg(formatBytes(logTotalBytes))
                                 color: Theme.warningColor
                                 font.pixelSize: 13
                             }
@@ -770,11 +779,11 @@ Rectangle {
                                 Label {
                                     text: {
                                         switch (model.status) {
-                                        case 0: return "开始"
-                                        case 1: return "完成"
-                                        case 2: return "失败"
-                                        case 3: return "取消"
-                                        default: return "未知"
+                                        case 0: return qsTr("Started")
+                                        case 1: return qsTr("Completed")
+                                        case 2: return qsTr("Failed")
+                                        case 3: return qsTr("Cancelled")
+                                        default: return qsTr("Unknown")
                                         }
                                     }
                                     color: {
@@ -804,7 +813,7 @@ Rectangle {
                     spacing: 20
 
                     Label {
-                        text: "带宽控制"
+                        text: qsTr("Bandwidth Control")
                         font.pixelSize: 20
                         font.bold: true
                         color: Theme.textColor
@@ -824,7 +833,7 @@ Rectangle {
                             ColumnLayout {
                                 spacing: 4
                                 Label {
-                                    text: "当前全局速度"
+                                    text: qsTr("Current Global Speed")
                                     color: Theme.textSecondary
                                     font.pixelSize: 13
                                 }
@@ -842,13 +851,13 @@ Rectangle {
                             ColumnLayout {
                                 spacing: 4
                                 Label {
-                                    text: "带宽限制"
+                                    text: qsTr("Bandwidth Limit")
                                     color: Theme.textSecondary
                                     font.pixelSize: 13
                                 }
                                 Label {
                                     id: bandwidthLimitLabel
-                                    text: "0 = 不限制"
+                                    text: qsTr("0 = Unlimited")
                                     color: Theme.warningColor
                                     font.pixelSize: 16
                                 }
@@ -863,7 +872,7 @@ Rectangle {
                         columnSpacing: 16
 
                         Label {
-                            text: "全局速度限制 (KB/s)"
+                            text: qsTr("Global Speed Limit (KB/s)")
                             color: Theme.textColor
                             font.pixelSize: 14
                             Layout.alignment: Qt.AlignVCenter
@@ -872,7 +881,7 @@ Rectangle {
                         TextField {
                             id: bandwidthGlobalLimitField
                             Layout.fillWidth: true
-                            placeholderText: "0 = 不限制"
+                            placeholderText: qsTr("0 = Unlimited")
                             color: Theme.textColor
                             font.pixelSize: 14
                             validator: IntValidator { bottom: 0; top: 999999 }
@@ -885,22 +894,21 @@ Rectangle {
 
                             onTextChanged: {
                                 saveSetting("Network/MaxBandwidth", text)
-                                bandwidthLimitLabel.text = text + " KB/s" + (parseInt(text) === 0 ? " (不限制)" : "")
+                                bandwidthLimitLabel.text = text + " KB/s" + (parseInt(text) === 0 ? qsTr(" (Unlimited)") : "")
                                 if (typeof bandwidthManager !== 'undefined')
                                     bandwidthManager.setGlobalLimit(parseInt(text) * 1024)
                             }
                         }
 
                         Label {
-                            text: "传输统计"
+                            text: qsTr("Transfer Statistics")
                             color: Theme.textColor
                             font.pixelSize: 14
                             Layout.alignment: Qt.AlignVCenter
                         }
 
                         Label {
-                            text: "总传输: " + formatBytes(typeof transferLogService !== 'undefined' ? transferLogService.totalBytesTransferred() : 0)
-                                  + "  |  记录数: " + (typeof transferLogService !== 'undefined' ? transferLogService.totalCount() : 0)
+                            text: qsTr("Total: %1 | Records: %2").arg(formatBytes(typeof transferLogService !== 'undefined' ? transferLogService.totalBytesTransferred() : 0)).arg(typeof transferLogService !== 'undefined' ? transferLogService.totalCount() : 0)
                             color: Theme.textSecondary
                             font.pixelSize: 13
                             wrapMode: Text.WordWrap
@@ -915,7 +923,7 @@ Rectangle {
                     spacing: 20
 
                     Label {
-                        text: "上传路径"
+                        text: qsTr("Upload Path")
                         font.pixelSize: 20
                         font.bold: true
                         color: Theme.textColor
@@ -928,7 +936,7 @@ Rectangle {
                         columnSpacing: 16
 
                         Label {
-                            text: "上传目录"
+                            text: qsTr("Upload Directory")
                             color: Theme.textColor
                             font.pixelSize: 14
                             Layout.alignment: Qt.AlignVCenter
@@ -956,7 +964,7 @@ Rectangle {
                     spacing: 20
 
                     Label {
-                        text: "TLS / HTTPS 设置"
+                        text: qsTr("TLS / HTTPS Settings")
                         font.pixelSize: 20
                         font.bold: true
                         color: Theme.textColor
@@ -978,7 +986,7 @@ Rectangle {
                                 font.pixelSize: 16
                             }
                             Label {
-                                text: "当前未启用 TLS 加密，所有传输均为明文"
+                                text: qsTr("TLS encryption is not enabled, all transfers are in plaintext")
                                 color: Theme.warningColor
                                 font.pixelSize: 13
                             }
@@ -1001,7 +1009,7 @@ Rectangle {
                                 font.pixelSize: 16
                             }
                             Label {
-                                text: "TLS 加密已启用，传输数据受保护"
+                                text: qsTr("TLS encryption is enabled, transfer data is protected")
                                 color: Theme.successColor
                                 font.pixelSize: 13
                             }
@@ -1015,7 +1023,7 @@ Rectangle {
                         columnSpacing: 16
 
                         Label {
-                            text: "启用 TLS"
+                            text: qsTr("Enable TLS")
                             color: Theme.textColor
                             font.pixelSize: 14
                             Layout.alignment: Qt.AlignVCenter
@@ -1027,7 +1035,7 @@ Rectangle {
                         }
 
                         Label {
-                            text: "HTTPS 端口"
+                            text: qsTr("HTTPS Port")
                             color: Theme.textColor
                             font.pixelSize: 14
                             Layout.alignment: Qt.AlignVCenter
@@ -1055,7 +1063,7 @@ Rectangle {
                         }
 
                         Label {
-                            text: "证书文件"
+                            text: qsTr("Certificate File")
                             color: Theme.textColor
                             font.pixelSize: 14
                             Layout.alignment: Qt.AlignVCenter
@@ -1066,7 +1074,7 @@ Rectangle {
                         TextField {
                             id: tlsCertField
                             Layout.fillWidth: true
-                            placeholderText: "选择 .pem 或 .crt 证书文件"
+                            placeholderText: qsTr("Select .pem or .crt certificate file")
                             color: Theme.textColor
                             font.pixelSize: 14
                             enabled: tlsEnabled.checked
@@ -1082,7 +1090,7 @@ Rectangle {
                         }
 
                         Label {
-                            text: "私钥文件"
+                            text: qsTr("Private Key File")
                             color: Theme.textColor
                             font.pixelSize: 14
                             Layout.alignment: Qt.AlignVCenter
@@ -1093,7 +1101,7 @@ Rectangle {
                         TextField {
                             id: tlsKeyField
                             Layout.fillWidth: true
-                            placeholderText: "选择 .pem 或 .key 私钥文件"
+                            placeholderText: qsTr("Select .pem or .key private key file")
                             color: Theme.textColor
                             font.pixelSize: 14
                             enabled: tlsEnabled.checked
@@ -1110,7 +1118,7 @@ Rectangle {
                     }
 
                     Label {
-                        text: "提示: 更改 TLS 设置后需要重启服务才能生效"
+                        text: qsTr("Note: TLS settings require service restart to take effect")
                         color: Theme.textSecondary
                         font.pixelSize: 12
                         Layout.topMargin: 8
@@ -1119,6 +1127,20 @@ Rectangle {
                     Item { Layout.fillHeight: true }
                 }
             }
+        }
+    }
+
+    Dialog {
+        id: restartHintDialog
+        title: qsTr("语言设置")
+        standardButtons: Dialog.Ok
+        modal: true
+        x: (parent.width - width) / 2
+        y: (parent.height - height) / 2
+        width: 320
+        contentItem: Label {
+            text: qsTr("语言设置将在重启后生效")
+            wrapMode: Text.WordWrap
         }
     }
 }

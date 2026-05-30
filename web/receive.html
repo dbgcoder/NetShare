@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NetShare - 发送文件</title>
+    <title data-i18n="title_send">NetShare - 发送文件</title>
     <style>
         :root {
             --bg-primary: #0f0f23;
@@ -294,20 +294,20 @@
 <body>
     <div class="container">
         <div class="card" id="uploadCard">
-            <h1>📤 发送文件</h1>
-            <p class="subtitle">选择文件发送到对方设备</p>
+            <h1 data-i18n="send_file">📤 发送文件</h1>
+            <p class="subtitle" data-i18n="send_file_subtitle">选择文件发送到对方设备</p>
 
             <div class="upload-area" id="uploadArea">
                 <div class="upload-icon">📁</div>
-                <p class="upload-text">将文件或文件夹拖拽到此处</p>
+                <p class="upload-text" data-i18n="drag_drop_hint">将文件或文件夹拖拽到此处</p>
             </div>
 
             <input type="file" id="fileInput" class="file-input" multiple>
             <input type="file" id="folderInput" class="file-input" multiple webkitdirectory directory mozdirectory>
 
             <div class="btn-group">
-                <label for="fileInput" class="btn-select-file">📄 选择文件</label>
-                <label for="folderInput" class="btn-select-folder">📁 选择文件夹</label>
+                <label for="fileInput" class="btn-select-file" data-i18n="select_file">📄 选择文件</label>
+                <label for="folderInput" class="btn-select-folder" data-i18n="select_folder">📁 选择文件夹</label>
             </div>
 
             <div class="file-list" id="fileList"></div>
@@ -316,44 +316,179 @@
                 <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
                 <div class="progress-info">
                     <span id="progressText">0%</span>
-                    <span id="statusText">发送中...</span>
+                    <span id="statusText" data-i18n="sending">发送中...</span>
                 </div>
             </div>
 
             <div class="resume-hint" id="resumeHint"></div>
 
-            <button class="btn" id="uploadBtn" disabled>
+            <button class="btn" id="uploadBtn" disabled data-i18n="start_send">
                 开始发送
             </button>
 
-            <button class="btn-retry" id="retryBtn">
+            <button class="btn-retry" id="retryBtn" data-i18n="retry_failed">
                 重试失败文件
             </button>
 
             <div class="result" id="resultSection">
                 <div class="result-icon">✅</div>
-                <div class="result-text" id="resultText">文件发送成功！</div>
+                <div class="result-text" id="resultText" data-i18n="send_success">文件发送成功！</div>
             </div>
 
             <div class="chat-section">
-                <div class="chat-title">💬 发送消息</div>
+                <div class="chat-title" data-i18n="send_message">💬 发送消息</div>
                 <div class="chat-messages" id="chatMessages"></div>
                 <div class="chat-input-row">
-                    <input type="text" class="chat-input" id="chatInput" placeholder="输入消息内容..." maxlength="500">
-                    <button class="chat-send-btn" id="chatSendBtn">发送</button>
+                    <input type="text" class="chat-input" id="chatInput" data-i18n-placeholder="input_message" placeholder="输入消息内容..." maxlength="500">
+                    <button class="chat-send-btn" id="chatSendBtn" data-i18n="send">发送</button>
                 </div>
             </div>
         </div>
-        <p class="footer">由 NetShare 提供 <span class="ws-status" id="wsStatus"><span class="ws-dot" id="wsDot"></span><span id="wsText"></span></span></p>
+        <p class="footer" data-i18n="powered_by">由 NetShare 提供 <span class="ws-status" id="wsStatus"><span class="ws-dot" id="wsDot"></span><span id="wsText"></span></span></p>
     </div>
 
 <script>
+var i18n = {
+    zh: {
+        title_send: 'NetShare - 发送文件',
+        send_file: '📤 发送文件',
+        send_file_subtitle: '选择文件发送到对方设备',
+        drag_drop_hint: '将文件或文件夹拖拽到此处',
+        select_file: '📄 选择文件',
+        select_folder: '📁 选择文件夹',
+        sending: '发送中...',
+        start_send: '开始发送',
+        retry_failed: '重试失败文件',
+        send_success: '文件发送成功！',
+        send_message: '💬 发送消息',
+        input_message: '输入消息内容...',
+        send: '发送',
+        powered_by: '由 NetShare 提供',
+        js_error: 'JS错误: ',
+        promise_error: 'Promise错误: ',
+        unknown_size: '未知大小',
+        file_count: '共 %1 个文件，总大小 %2',
+        upload_paused: '上传已暂停',
+        files_failed: '%1 个文件发送失败',
+        uploading: '发送中...',
+        completed: '已完成',
+        failed: '失败: ',
+        disconnected: '与服务端断开连接，请重试',
+        live_connection: '实时连接',
+        connection_lost: '连接断开',
+        conn_broken: '连接断开',
+        paused: '已暂停',
+        check_error: '检查接口返回错误: HTTP ',
+        check_failed: '检查上传状态失败: ',
+        upload_error: '上传过程出错: ',
+        resume_detected: '检测到未完成的上传，',
+        skip_files: '跳过%1个已完成文件',
+        resume_files: '续传%1个部分文件',
+        upload_paused_err: '上传已暂停',
+        network_error: '网络错误: ',
+        timeout: '超时: ',
+        resume_failed: '续传失败，服务端连续重启超过%1次，请重新上传',
+        unfinished_tasks: '检测到 %1 个未完成的上传任务，请选择相同文件后点击开始发送续传',
+        pending_tasks: '有未完成的任务，请选择文件后续传',
+        retry_check_failed: '重试检查失败: ',
+        finalizing: '正在完成...',
+        sent_count: '成功发送 %1 个文件！',
+        finalize_failed: '完成操作失败',
+        msg_send_failed: '消息发送失败',
+        msg_send_error: '消息发送失败: '
+    },
+    en: {
+        title_send: 'NetShare - Send Files',
+        send_file: '📤 Send Files',
+        send_file_subtitle: 'Select files to send to the other device',
+        drag_drop_hint: 'Drag and drop files or folders here',
+        select_file: '📄 Select Files',
+        select_folder: '📁 Select Folder',
+        sending: 'Sending...',
+        start_send: 'Start Sending',
+        retry_failed: 'Retry Failed Files',
+        send_success: 'Files sent successfully!',
+        send_message: '💬 Send Message',
+        input_message: 'Type a message...',
+        send: 'Send',
+        powered_by: 'Powered by NetShare',
+        js_error: 'JS Error: ',
+        promise_error: 'Promise Error: ',
+        unknown_size: 'Unknown size',
+        file_count: '%1 files, total %2',
+        upload_paused: 'Upload paused',
+        files_failed: '%1 file(s) failed to send',
+        uploading: 'Sending...',
+        completed: 'Completed',
+        failed: 'Failed: ',
+        disconnected: 'Disconnected from server, please retry',
+        live_connection: 'Live',
+        connection_lost: 'Connection lost',
+        conn_broken: 'Connection broken',
+        paused: 'Paused',
+        check_error: 'Check API error: HTTP ',
+        check_failed: 'Failed to check upload status: ',
+        upload_error: 'Upload error: ',
+        resume_detected: 'Unfinished upload detected, ',
+        skip_files: 'Skipped %1 completed file(s)',
+        resume_files: 'Resuming %1 partial file(s)',
+        upload_paused_err: 'Upload paused',
+        network_error: 'Network error: ',
+        timeout: 'Timeout: ',
+        resume_failed: 'Resume failed, server restarted more than %1 times, please re-upload',
+        unfinished_tasks: '%1 unfinished upload task(s) detected, select the same files and click Start to resume',
+        pending_tasks: 'Unfinished tasks exist, select files to resume',
+        retry_check_failed: 'Retry check failed: ',
+        finalizing: 'Finalizing...',
+        sent_count: 'Successfully sent %1 file(s)!',
+        finalize_failed: 'Finalize failed',
+        msg_send_failed: 'Failed to send message',
+        msg_send_error: 'Failed to send message: '
+    }
+};
+
+var currentLang = 'zh';
+
+function t(key) {
+    return (i18n[currentLang] && i18n[currentLang][key]) || (i18n.zh[key]) || key;
+}
+
+function tf(key) {
+    var args = Array.prototype.slice.call(arguments, 1);
+    var str = t(key);
+    for (var i = 0; i < args.length; i++) {
+        str = str.replace('%' + (i + 1), args[i]);
+    }
+    return str;
+}
+
+function applyI18n() {
+    var params = new URLSearchParams(window.location.search);
+    currentLang = params.get('lang') || 'zh';
+    if (!i18n[currentLang]) currentLang = 'zh';
+    document.documentElement.lang = currentLang === 'en' ? 'en' : 'zh-CN';
+    document.querySelectorAll('[data-i18n]').forEach(function(el) {
+        var key = el.getAttribute('data-i18n');
+        if (i18n[currentLang] && i18n[currentLang][key] !== undefined) {
+            el.textContent = i18n[currentLang][key];
+        }
+    });
+    document.querySelectorAll('[data-i18n-placeholder]').forEach(function(el) {
+        var key = el.getAttribute('data-i18n-placeholder');
+        if (i18n[currentLang] && i18n[currentLang][key] !== undefined) {
+            el.placeholder = i18n[currentLang][key];
+        }
+    });
+    document.title = t('title_send');
+}
+
+applyI18n();
 // ===== Global error handler =====
 window.onerror = function(msg, url, line, col, err) {
-    alert('JS错误: ' + msg + ' (行' + line + ')');
+    alert(t('js_error') + msg + ' (line ' + line + ')');
 };
 window.addEventListener('unhandledrejection', function(e) {
-    alert('Promise错误: ' + (e.reason && e.reason.message ? e.reason.message : e.reason));
+    alert(t('promise_error') + (e.reason && e.reason.message ? e.reason.message : e.reason));
 });
 
 // ===== State =====
@@ -416,7 +551,7 @@ function connectWebSocket() {
                 if (pct) pct.textContent = msg.data.progress + '%';
                 if (msg.data.speed) {
                     var st = document.getElementById('statusText');
-                    if (st) st.textContent = '发送中... ' + msg.data.progress + '%  ' + formatSize(msg.data.speed) + '/s';
+                    if (st) st.textContent = t('sending') + ' ' + msg.data.progress + '%  ' + formatSize(msg.data.speed) + '/s';
                 }
             } else if (msg.type === 'pause_upload') {
                 isUploading = false;
@@ -449,7 +584,7 @@ function connectWebSocket() {
                 wsDisconnectTimer = null;
                 if (!wsConnected && isUploading) {
                     markAllActiveAsFailed();
-                    document.getElementById('statusText').textContent = '与服务端断开连接，请重试';
+                    document.getElementById('statusText').textContent = t('disconnected');
                     retryBtn.classList.add('active');
                 }
             }, 10000);
@@ -464,7 +599,7 @@ function updateWsStatus(connected) {
     var dot = document.getElementById('wsDot');
     var text = document.getElementById('wsText');
     if (dot) dot.className = 'ws-dot' + (connected ? ' connected' : '');
-    if (text) text.textContent = connected ? '实时连接' : (isUploading ? '连接断开' : '');
+    if (text) text.textContent = connected ? t('live_connection') : (isUploading ? t('connection_lost') : '');
 }
 
 // ===== Drag & Drop =====
@@ -604,7 +739,7 @@ function renderFileList() {
             '<div class="file-item-icon">📄</div>' +
             '<div class="file-item-info">' +
                 '<div class="file-item-name" title="' + escapeAttr(item.relativePath) + '">' + escapeHtml(item.relativePath) + '</div>' +
-                '<div class="file-item-size">' + (item.file ? formatSize(item.file.size) : '未知大小') + '</div>' +
+                '<div class="file-item-size">' + (item.file ? formatSize(item.file.size) : t('unknown_size')) + '</div>' +
                 '<div class="file-item-progress"><div class="file-item-progress-fill" id="file-progress-' + i + '"></div></div>' +
                 '<div class="file-item-status" id="file-status-' + i + '"></div>' +
             '</div>' +
@@ -614,7 +749,7 @@ function renderFileList() {
     if (selectedFiles.length > 0) {
         var summary = document.createElement('div');
         summary.className = 'file-summary';
-        summary.textContent = '共 ' + selectedFiles.length + ' 个文件，总大小 ' + formatSize(totalSize);
+        summary.textContent = tf('file_count', selectedFiles.length, formatSize(totalSize));
         fileListEl.appendChild(summary);
     }
 }
@@ -737,34 +872,34 @@ async function startUpload() {
                 resumeCount = checkData.partial.length;
             }
             if (skipCount > 0 || resumeCount > 0) {
-                var hint = '检测到未完成的上传，';
+                var hint = t('resume_detected');
                 var parts = [];
-                if (skipCount > 0) parts.push('跳过' + skipCount + '个已完成文件');
-                if (resumeCount > 0) parts.push('续传' + resumeCount + '个部分文件');
+                if (skipCount > 0) parts.push(tf('skip_files', skipCount));
+                if (resumeCount > 0) parts.push(tf('resume_files', resumeCount));
                 resumeHint.textContent = hint + parts.join('，');
                 resumeHint.classList.add('active');
             }
         } else {
-            alert('检查接口返回错误: HTTP ' + checkResp.status);
+            alert(t('check_error') + checkResp.status);
         }
     } catch (ex) {
-        alert('检查上传状态失败: ' + (ex.message || ex));
+        alert(t('check_failed') + (ex.message || ex));
     }
 
     try {
         await uploadConcurrent(filesToUpload);
     } catch (ex) {
-        alert('上传过程出错: ' + (ex.message || ex));
+        alert(t('upload_error') + (ex.message || ex));
     }
 
     var failCount = Object.values(uploadStatus).filter(function(s) { return s === 'failed'; }).length;
     var pausedCount = Object.values(uploadStatus).filter(function(s) { return s === 'paused'; }).length;
     var doneCount = Object.values(uploadStatus).filter(function(s) { return s === 'done'; }).length;
     if (pausedCount > 0) {
-        document.getElementById('statusText').textContent = '上传已暂停';
+        document.getElementById('statusText').textContent = t('upload_paused');
         retryBtn.classList.add('active');
     } else if (failCount > 0) {
-        document.getElementById('statusText').textContent = failCount + ' 个文件发送失败';
+        document.getElementById('statusText').textContent = tf('files_failed', failCount);
         retryBtn.classList.add('active');
     } else if (doneCount === selectedFiles.length) {
         await finalize();
@@ -780,19 +915,19 @@ async function uploadConcurrent(fileList) {
         while (idx < fileList.length && isUploading) {
             var item = fileList[idx++];
             uploadStatus[item.relativePath] = 'uploading';
-            updateFileStatus(item.relativePath, '发送中...');
+            updateFileStatus(item.relativePath, t('uploading'));
             try {
                 await uploadOne(item);
                 if (!isUploading) break;
                 uploadStatus[item.relativePath] = 'done';
-                updateFileStatus(item.relativePath, '已完成');
+                updateFileStatus(item.relativePath, t('completed'));
             } catch (e) {
                 if (!isUploading) break;
                 uploadStatus[item.relativePath] = 'failed';
                 if (failedFiles.indexOf(item) === -1) {
                     failedFiles.push(item);
                 }
-                updateFileStatus(item.relativePath, '失败: ' + (e.message || e));
+                updateFileStatus(item.relativePath, t('failed') + (e.message || e));
             }
             var doneCount = Object.values(uploadStatus).filter(function(s) { return s === 'done'; }).length;
             updateProgress(doneCount, total, uploadedSize, totalUploadSize);
@@ -867,7 +1002,7 @@ function uploadChunked(item, info) {
                                 nextCI = pending.length;
                                 isUploading = false;
                                 markAllActiveAsPaused();
-                                rejectW(new Error('上传已暂停'));
+                                rejectW(new Error(t('upload_paused_err')));
                             } else if (xhr.status === 410) {
                                 recheckAndResume(item, info).then(function() {
                                     nextCI = pending.length;
@@ -918,7 +1053,7 @@ function recheckAndResume(item, info) {
     console.log('[Upload][recheck.triggered] file=' + item.relativePath + ', retry=' + recheckCount);
     if (recheckCount > MAX_RECHECK_RETRIES) {
         console.log('[Upload][recheck.failed] exceeded max retries');
-        return Promise.reject(new Error('续传失败，服务端连续重启超过' + MAX_RECHECK_RETRIES + '次，请重新上传'));
+        return Promise.reject(new Error(tf('resume_failed', MAX_RECHECK_RETRIES)));
     }
     return fetch('/api/upload/check', {
         method: 'POST',
@@ -983,7 +1118,7 @@ function uploadSmall(item, info) {
             } else if (xhr.status === 409) {
                 isUploading = false;
                 markAllActiveAsPaused();
-                reject(new Error('上传已暂停'));
+                reject(new Error(t('upload_paused_err')));
             } else if (xhr.status === 410) {
                 recheckAndResume(item, info).then(resolve).catch(function(e) {
                     reject(new Error('recheck failed: ' + (e.message || e)));
@@ -992,8 +1127,8 @@ function uploadSmall(item, info) {
                 reject(new Error('HTTP ' + xhr.status + ': ' + xhr.responseText.substring(0, 200)));
             }
         };
-        xhr.onerror = function() { xhrProgressActive = false; reject(new Error('网络错误: ' + item.relativePath)); };
-        xhr.ontimeout = function() { xhrProgressActive = false; reject(new Error('超时: ' + item.relativePath)); };
+        xhr.onerror = function() { xhrProgressActive = false; reject(new Error(t('network_error') + item.relativePath)); };
+        xhr.ontimeout = function() { xhrProgressActive = false; reject(new Error(t('timeout') + item.relativePath)); };
         xhr.send(fd);
     });
 }
@@ -1006,7 +1141,7 @@ function updateProgress(done, total, doneSz, totalSz) {
     if (pctEl) pctEl.textContent = pct + '% (' + done + '/' + total + ')';
     var st = document.getElementById('statusText');
     var spd = calcUploadSpeed(doneSz);
-    if (st) st.textContent = '发送中... ' + formatSize(doneSz) + ' / ' + formatSize(totalSz) + '  ' + formatSize(spd) + '/s';
+    if (st) st.textContent = t('sending') + ' ' + formatSize(doneSz) + ' / ' + formatSize(totalSz) + '  ' + formatSize(spd) + '/s';
 }
 
 function updateFileStatus(relativePath, statusText) {
@@ -1028,7 +1163,7 @@ function markAllActiveAsFailed() {
             if (found && failedFiles.indexOf(found) === -1) {
                 failedFiles.push(found);
             }
-            updateFileStatus(path, '连接断开');
+            updateFileStatus(path, t('conn_broken'));
         }
     }
 }
@@ -1042,10 +1177,10 @@ function markAllActiveAsPaused() {
             if (found && failedFiles.indexOf(found) === -1) {
                 failedFiles.push(found);
             }
-            updateFileStatus(path, '已暂停');
+            updateFileStatus(path, t('paused'));
         }
     }
-    document.getElementById('statusText').textContent = '上传已暂停';
+    document.getElementById('statusText').textContent = t('upload_paused');
     retryBtn.classList.add('active');
 }
 
@@ -1056,7 +1191,7 @@ async function checkUnfinishedTasks() {
         var data = await resp.json();
         if (data.partial && data.partial.length > 0) {
             var hint = document.getElementById('resumeHint');
-            hint.textContent = '检测到 ' + data.partial.length + ' 个未完成的上传任务，请选择相同文件后点击开始发送续传';
+            hint.textContent = tf('unfinished_tasks', data.partial.length);
             hint.classList.add('active');
             document.getElementById('progressWrap').classList.add('active');
             var completedBytes = 0;
@@ -1069,7 +1204,7 @@ async function checkUnfinishedTasks() {
                 var pct = Math.round(completedBytes / totalAll * 100);
                 document.getElementById('progressFill').style.width = pct + '%';
                 document.getElementById('progressText').textContent = pct + '%';
-                document.getElementById('statusText').textContent = '有未完成的任务，请选择文件后续传';
+                document.getElementById('statusText').textContent = t('pending_tasks');
             }
             pendingPartialInfo = data.partial;
         }
@@ -1125,7 +1260,7 @@ async function retryFailed() {
             }
         }
     } catch (ex) {
-        alert('重试检查失败: ' + (ex.message || ex));
+        alert(t('retry_check_failed') + (ex.message || ex));
     }
 
     retry.forEach(function(x) { uploadStatus[x.relativePath] = 'pending'; });
@@ -1135,10 +1270,10 @@ async function retryFailed() {
     var pausedCount = Object.values(uploadStatus).filter(function(s) { return s === 'paused'; }).length;
     var doneCount = Object.values(uploadStatus).filter(function(s) { return s === 'done'; }).length;
     if (pausedCount > 0) {
-        document.getElementById('statusText').textContent = '上传已暂停';
+        document.getElementById('statusText').textContent = t('upload_paused');
         retryBtn.classList.add('active');
     } else if (failCount > 0) {
-        document.getElementById('statusText').textContent = failCount + ' 个文件发送失败';
+        document.getElementById('statusText').textContent = tf('files_failed', failCount);
         retryBtn.classList.add('active');
     } else if (doneCount === selectedFiles.length) {
         await finalize();
@@ -1146,7 +1281,7 @@ async function retryFailed() {
 }
 
 async function finalize() {
-    document.getElementById('statusText').textContent = '正在完成...';
+    document.getElementById('statusText').textContent = t('finalizing');
     var firstPath = selectedFiles[0].relativePath;
     var isFolder = firstPath.indexOf('/') >= 0;
     var folderRoot = isFolder ? firstPath.split('/')[0] : '';
@@ -1170,14 +1305,14 @@ async function finalize() {
             uploadBtn.style.display = 'none';
             document.getElementById('progressWrap').classList.remove('active');
             retryBtn.classList.remove('active');
-            document.getElementById('resultText').textContent = '成功发送 ' + d.count + ' 个文件！';
+            document.getElementById('resultText').textContent = tf('sent_count', d.count);
             document.getElementById('resultSection').classList.add('active');
         } else {
-            document.getElementById('statusText').textContent = '完成操作失败';
+            document.getElementById('statusText').textContent = t('finalize_failed');
             uploadBtn.disabled = false;
         }
     } catch (e) {
-        document.getElementById('statusText').textContent = '完成操作失败';
+        document.getElementById('statusText').textContent = t('finalize_failed');
         uploadBtn.disabled = false;
     }
 }
@@ -1242,11 +1377,11 @@ function sendChatMessage() {
             chatMessages.push({ content: text, isSent: true, timestamp: payload.timestamp });
             renderChatMessages();
         } else {
-            alert('消息发送失败');
+            alert(t('msg_send_failed'));
         }
         chatSendBtn.disabled = false;
     }).catch(function(err) {
-        alert('消息发送失败: ' + err.message);
+        alert(t('msg_send_error') + err.message);
         chatSendBtn.disabled = false;
     });
 }

@@ -20,6 +20,17 @@ ApplicationWindow {
 
     property bool isSettingsPage: false
 
+    function switchToPage(pageIndex) {
+        if (pageIndex >= 0 && pageIndex < pageStack.length) {
+            menuList.currentIndex = pageIndex
+            root.isSettingsPage = (pageIndex === pageStack.length - 1)
+            stackView.replace(pageStack[pageIndex])
+        }
+        root.show()
+        root.raise()
+        root.requestActivate()
+    }
+
     onClosing: function(close) {
         if (typeof settingsManager !== 'undefined' && settingsManager.getBool("General/MinimizeToTray", true)) {
             close.accepted = false
@@ -278,7 +289,7 @@ ApplicationWindow {
 
             Label {
                 id: statusBarLeft
-                text: typeof shareManager !== 'undefined' ? qsTr("IP：") + shareManager.localIp : qsTr("IP：--")
+                text: typeof shareManager !== 'undefined' ? qsTr("IP：%1").arg(shareManager.localIp) : qsTr("IP：--")
                 color: Theme.textSecondary
                 font.pixelSize: 11
             }
@@ -287,7 +298,7 @@ ApplicationWindow {
 
             Label {
                 id: statusBarCenter
-                text: typeof shareManager !== 'undefined' ? qsTr("分享：") + shareManager.getActiveShareCount() + qsTr(" 个活跃") : qsTr("分享：0 个活跃")
+                text: typeof shareManager !== 'undefined' ? qsTr("分享：%1 个活跃").arg(shareManager.getActiveShareCount()) : qsTr("分享：0 个活跃")
                 color: Theme.textSecondary
                 font.pixelSize: 11
             }
@@ -322,10 +333,10 @@ ApplicationWindow {
             anchors.topMargin: 8
 
             model: ListModel {
-                ListElement { title: qsTr("分享管理"); icon: "🔗" }
-                ListElement { title: qsTr("接收管理"); icon: "📥" }
-                ListElement { title: qsTr("传输列表"); icon: "📤" }
-                ListElement { title: qsTr("设备发现"); icon: "🌐" }
+                ListElement { title: qsTr("发送"); icon: "qrc:/qt/qml/NetShare/qml/icons/send.svg"; isSvg: true }
+                ListElement { title: qsTr("接收"); icon: "qrc:/qt/qml/NetShare/qml/icons/receive.svg"; isSvg: true }
+                ListElement { title: qsTr("传输"); icon: "⇅"; isSvg: false }
+                ListElement { title: qsTr("LAN"); icon: "🌐"; isSvg: false }
             }
 
             delegate: Item {
@@ -364,10 +375,29 @@ ApplicationWindow {
                         anchors.fill: parent
                         anchors.leftMargin: 12
 
-                        Label {
-                            text: icon
-                            font.pixelSize: 18
-                            color: ListView.isCurrentItem ? "#ffffff" : Theme.textColor
+                        Loader {
+                            sourceComponent: isSvg ? svgIconComponent : emojiIconComponent
+                            property string iconSource: icon
+                            property bool isSelected: ListView.isCurrentItem
+
+                            Component {
+                                id: svgIconComponent
+                                Image {
+                                    source: iconSource
+                                    sourceSize.width: 18
+                                    sourceSize.height: 18
+                                    opacity: isSelected ? 1.0 : 0.7
+                                }
+                            }
+
+                            Component {
+                                id: emojiIconComponent
+                                Label {
+                                    text: iconSource
+                                    font.pixelSize: 18
+                                    color: isSelected ? "#ffffff" : Theme.textColor
+                                }
+                            }
                         }
 
                         Label {

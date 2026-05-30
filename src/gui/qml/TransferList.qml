@@ -54,13 +54,13 @@ Rectangle {
 
                 var statusText = getStatusText(task.status)
                 var statusColor = getStatusColor(task.status)
-                var typeText = task.type === 0 ? "下载" : "上传"
+                var typeText = task.type === 0 ? qsTr("Download") : qsTr("Upload")
                 var typeIcon = task.type === 0 ? "⬇" : "⬆"
                 var speedText = formatSpeed(task.speed)
                 var sizeText = formatFileSize(task.transferredSize) + " / " + formatFileSize(task.fileSize)
                 taskListModel.append({
                     taskId: task.taskId,
-                    fileName: task.fileName || "未知文件",
+                    fileName: task.fileName || qsTr("Unknown file"),
                     typeText: typeText,
                     typeIcon: typeIcon,
                     status: task.status,
@@ -113,13 +113,13 @@ Rectangle {
 
                 var logStatusText = getStatusText(mappedStatus)
                 var logStatusColor = getStatusColor(mappedStatus)
-                var logTypeText = log.type === 0 ? "下载" : "上传"
+                var logTypeText = log.type === 0 ? qsTr("Download") : qsTr("Upload")
                 var logTypeIcon = log.type === 0 ? "⬇" : "⬆"
                 var logSizeText = formatFileSize(log.fileSize)
 
                 taskListModel.append({
                     taskId: log.taskId && log.taskId.length > 0 ? log.taskId : log.id,
-                    fileName: log.fileName || "未知文件",
+                    fileName: log.fileName || qsTr("Unknown file"),
                     typeText: logTypeText,
                     typeIcon: logTypeIcon,
                     status: mappedStatus,
@@ -139,7 +139,7 @@ Rectangle {
             }
         }
 
-        taskCountLabel.text = "共 " + taskListModel.count + " 个任务"
+        taskCountLabel.text = qsTr("Total %1 tasks").arg(taskListModel.count)
     }
 
     function updateTask(taskId, progress, speed) {
@@ -161,15 +161,15 @@ Rectangle {
 
     function getStatusText(status) {
         switch (status) {
-            case 0: return "等待中"
-            case 1: return "准备中"
-            case 2: return "下载中"
-            case 3: return "上传中"
-            case 4: return "已暂停"
-            case 5: return "已完成"
-            case 6: return "失败"
-            case 7: return "已取消"
-            default: return "未知"
+            case 0: return qsTr("Pending")
+            case 1: return qsTr("Preparing")
+            case 2: return qsTr("Downloading")
+            case 3: return qsTr("Uploading")
+            case 4: return qsTr("Paused")
+            case 5: return qsTr("Completed")
+            case 6: return qsTr("Failed")
+            case 7: return qsTr("Cancelled")
+            default: return qsTr("Unknown")
         }
     }
 
@@ -220,7 +220,7 @@ Rectangle {
             Layout.fillWidth: true
 
             Label {
-                text: "传输列表"
+                text: qsTr("Transfer List")
                 font.pixelSize: 24
                 font.bold: true
                 color: Theme.textColor
@@ -229,7 +229,7 @@ Rectangle {
             Item { Layout.fillWidth: true }
 
             Button {
-                text: "全部暂停"
+                text: qsTr("Pause All")
                 visible: taskListModel.count > 0
                 contentItem: Label {
                     text: parent.text
@@ -252,7 +252,7 @@ Rectangle {
             }
 
             Button {
-                text: "清空已完成"
+                text: qsTr("Clear Completed")
                 visible: taskListModel.count > 0
                 contentItem: Label {
                     text: parent.text
@@ -284,7 +284,7 @@ Rectangle {
             spacing: 8
 
             Repeater {
-                model: ["全部", "下载", "上传", "进行中", "已完成", "失败"]
+                model: [qsTr("All"), qsTr("Download"), qsTr("Upload"), qsTr("Active"), qsTr("Completed"), qsTr("Failed")]
                 delegate: Rectangle {
                     property bool isSelected: currentFilter === index
                     Layout.preferredHeight: 32
@@ -311,7 +311,7 @@ Rectangle {
 
             Label {
                 id: taskCountLabel
-                text: "共 0 个任务"
+                text: qsTr("Total 0 tasks")
                 color: Theme.textSecondary
                 font.pixelSize: 13
             }
@@ -343,7 +343,7 @@ Rectangle {
 
                 Label {
                     anchors.centerIn: parent
-                    text: "暂无传输任务"
+                    text: qsTr("No transfer tasks")
                     color: Theme.textSecondary
                     font.pixelSize: 16
                     horizontalAlignment: Text.AlignHCenter
@@ -421,7 +421,7 @@ Rectangle {
                                 color: parent.hovered ? "#3e3e42" : "transparent"
                                 radius: 4
                             }
-                            ToolTip.text: "暂停"
+                            ToolTip.text: qsTr("Pause")
                             ToolTip.visible: hovered
                             onClicked: transferEngine.pauseTask(model.taskId)
                         }
@@ -439,7 +439,7 @@ Rectangle {
                                 color: parent.hovered ? "#3e3e42" : "transparent"
                                 radius: 4
                             }
-                            ToolTip.text: "继续"
+                            ToolTip.text: qsTr("Resume")
                             ToolTip.visible: hovered
                             onClicked: transferEngine.resumeTask(model.taskId)
                         }
@@ -457,7 +457,7 @@ Rectangle {
                                 color: parent.hovered ? "#3e3e42" : "transparent"
                                 radius: 4
                             }
-                            ToolTip.text: "删除"
+                            ToolTip.text: qsTr("Delete")
                             ToolTip.visible: hovered
                             onClicked: transferEngine.deleteTask(model.taskId)
                         }

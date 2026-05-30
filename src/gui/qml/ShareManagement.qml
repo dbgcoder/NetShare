@@ -52,7 +52,7 @@ Rectangle {
                 fileName: fileName,
                 fileSize: fileSize,
                 expireTime: expireTime,
-                status: isExpired ? "已过期" : "进行中",
+                status: isExpired ? qsTr("Expired") : qsTr("Active"),
                 statusColor: isExpired ? Theme.errorColor : Theme.successColor,
                 visitCount: share.downloadCount,
                 shareUrl: "http://" + shareManager.localIp + ":8080/s/" + share.token,
@@ -65,7 +65,7 @@ Rectangle {
                 expiresAt: share.expiresAt.toString()
             })
         }
-        shareCountLabel.text = "共 " + shareListModel.count + " 个分享"
+        shareCountLabel.text = qsTr("Total %1 shares").arg(shareListModel.count)
     }
 
     function formatFileSize(bytes) {
@@ -77,17 +77,17 @@ Rectangle {
 
     function getExpireTime(expiresAt) {
         if (!expiresAt || expiresAt === "" || expiresAt === undefined)
-            return "永不过期"
+            return qsTr("Never expires")
         var now = new Date()
         var expire = new Date(expiresAt)
         if (isNaN(expire.getTime()))
-            return "永不过期"
+            return qsTr("Never expires")
         var diff = expire - now
-        if (diff <= 0) return "已过期"
+        if (diff <= 0) return qsTr("Expired")
         var hours = Math.floor(diff / 3600000)
-        if (hours < 24) return hours + "小时后过期"
+        if (hours < 24) return qsTr("%1 hours left").arg(hours)
         var days = Math.floor(hours / 24)
-        return days + "天后过期"
+        return qsTr("%1 days left").arg(days)
     }
 
     function copyToClipboard(text) {
@@ -107,7 +107,7 @@ Rectangle {
             Layout.fillWidth: true
 
             Label {
-                text: "分享管理"
+                text: qsTr("Share Management")
                 font.pixelSize: 24
                 font.bold: true
                 color: Theme.textColor
@@ -116,7 +116,7 @@ Rectangle {
             Item { Layout.fillWidth: true }
 
             Button {
-                text: "新建分享"
+                text: qsTr("New Share")
                 contentItem: Label {
                     text: parent.text
                     color: "#ffffff"
@@ -135,7 +135,7 @@ Rectangle {
             spacing: 8
 
             Repeater {
-                model: ["全部", "进行中", "已过期"]
+                model: [qsTr("All"), qsTr("Active"), qsTr("Expired")]
                 delegate: Rectangle {
                     property bool isSelected: currentIndex === index
                     Layout.preferredHeight: 32
@@ -162,7 +162,7 @@ Rectangle {
 
             Label {
                 id: shareCountLabel
-                text: "共 0 个分享"
+                text: qsTr("Total 0 shares")
                 color: Theme.textSecondary
                 font.pixelSize: 13
             }
@@ -194,7 +194,7 @@ Rectangle {
 
                 Label {
                     anchors.centerIn: parent
-                    text: "暂无分享\n点击右上角「新建分享」开始"
+                    text: qsTr("No shares yet\nClick \"New Share\" to start")
                     color: Theme.textSecondary
                     font.pixelSize: 16
                     horizontalAlignment: Text.AlignHCenter
@@ -285,7 +285,7 @@ Rectangle {
                     spacing: 8
 
                     Label {
-                        text: "访问 " + model.visitCount + " 次"
+                        text: qsTr("Visits: %1").arg(model.visitCount)
                         color: Theme.textSecondary
                         font.pixelSize: 11
                     }
@@ -305,7 +305,7 @@ Rectangle {
                                 color: parent.hovered ? "#3e3e42" : "transparent"
                                 radius: 4
                             }
-                            ToolTip.text: "复制链接"
+                            ToolTip.text: qsTr("Copy Link")
                             ToolTip.visible: hovered
                             onClicked: copyToClipboard(model.shareUrl)
                         }
@@ -322,7 +322,7 @@ Rectangle {
                                 color: parent.hovered ? "#3e3e42" : "transparent"
                                 radius: 4
                             }
-                            ToolTip.text: "二维码"
+                            ToolTip.text: qsTr("QR Code")
                             ToolTip.visible: hovered
                             onClicked: {
                                 qrCodeText.text = model.shareUrl
@@ -343,7 +343,7 @@ Rectangle {
                                 color: parent.hovered ? "#3e3e42" : "transparent"
                                 radius: 4
                             }
-                            ToolTip.text: "取消分享"
+                            ToolTip.text: qsTr("Cancel Share")
                             ToolTip.visible: hovered
                             onClicked: {
                                 shareManager.cancelShare(model.token)
@@ -373,7 +373,7 @@ Rectangle {
         property int downloadCount: 0
         property string expiresAt: ""
 
-        title: "分享详情"
+        title: qsTr("Share Details")
         modal: true
         width: 480
         height: 420
@@ -428,7 +428,7 @@ Rectangle {
                             }
 
                             Label {
-                                text: detailDialog.fileSize + (detailDialog.isFolder ? " (文件夹)" : "")
+                                text: detailDialog.fileSize + (detailDialog.isFolder ? qsTr(" (Folder)") : "")
                                 color: Theme.textSecondary
                                 font.pixelSize: 12
                             }
@@ -457,7 +457,7 @@ Rectangle {
                     columnSpacing: 12
 
                     Label {
-                        text: "分享路径"
+                        text: qsTr("Share Path")
                         color: Theme.textSecondary
                         font.pixelSize: 13
                     }
@@ -470,7 +470,7 @@ Rectangle {
                     }
 
                     Label {
-                        text: "过期时间"
+                        text: qsTr("Expire Time")
                         color: Theme.textSecondary
                         font.pixelSize: 13
                     }
@@ -483,40 +483,40 @@ Rectangle {
                     }
 
                     Label {
-                        text: "访问次数"
+                        text: qsTr("Visit Count")
                         color: Theme.textSecondary
                         font.pixelSize: 13
                     }
                     Label {
-                        text: detailDialog.downloadCount + " 次"
+                        text: detailDialog.downloadCount + qsTr(" times")
                         color: Theme.textColor
                         font.pixelSize: 13
                     }
 
                     Label {
-                        text: "下载限制"
+                        text: qsTr("Download Limit")
                         color: Theme.textSecondary
                         font.pixelSize: 13
                     }
                     Label {
-                        text: detailDialog.maxDownloads > 0 ? detailDialog.maxDownloads + " 次" : "无限制"
+                        text: detailDialog.maxDownloads > 0 ? detailDialog.maxDownloads + qsTr(" times") : qsTr("Unlimited")
                         color: Theme.textColor
                         font.pixelSize: 13
                     }
 
                     Label {
-                        text: "访问密码"
+                        text: qsTr("Access Password")
                         color: Theme.textSecondary
                         font.pixelSize: 13
                     }
                     Label {
-                        text: detailDialog.passwordRequired ? "已设置" : "无"
+                        text: detailDialog.passwordRequired ? qsTr("Set") : qsTr("None")
                         color: detailDialog.passwordRequired ? Theme.warningColor : Theme.textColor
                         font.pixelSize: 13
                     }
 
                     Label {
-                        text: "分享令牌"
+                        text: qsTr("Share Token")
                         color: Theme.textSecondary
                         font.pixelSize: 13
                     }
@@ -535,7 +535,7 @@ Rectangle {
                 }
 
                 Label {
-                    text: "分享链接"
+                    text: qsTr("Share Link")
                     color: Theme.textSecondary
                     font.pixelSize: 13
                 }
@@ -576,7 +576,7 @@ Rectangle {
                                 color: parent.hovered ? "#3e3e42" : "transparent"
                                 radius: 4
                             }
-                            ToolTip.text: "复制链接"
+                            ToolTip.text: qsTr("Copy Link")
                             ToolTip.visible: hovered
                             onClicked: copyToClipboard(detailDialog.shareUrl)
                         }
@@ -593,7 +593,7 @@ Rectangle {
                                 color: parent.hovered ? "#3e3e42" : "transparent"
                                 radius: 4
                             }
-                            ToolTip.text: "二维码"
+                            ToolTip.text: qsTr("QR Code")
                             ToolTip.visible: hovered
                             onClicked: {
                                 qrCodeText.text = detailDialog.shareUrl
@@ -638,7 +638,7 @@ Rectangle {
                     anchors.left: parent.left
                     anchors.leftMargin: 16
                     anchors.verticalCenter: parent.verticalCenter
-                    text: "新建分享"
+                    text: qsTr("New Share")
                     color: Theme.textColor
                     font.pixelSize: 16
                     font.bold: true
@@ -652,7 +652,7 @@ Rectangle {
                 spacing: 16
 
                 Label {
-                    text: "选择文件或文件夹"
+                    text: qsTr("Select file or folder")
                     color: Theme.textColor
                 }
 
@@ -662,7 +662,7 @@ Rectangle {
                     TextField {
                         id: filePathInput
                         Layout.fillWidth: true
-                        placeholderText: "请选择文件或文件夹"
+                        placeholderText: qsTr("Please select file or folder")
                         readOnly: true
                         color: Theme.textColor
                         background: Rectangle {
@@ -673,12 +673,12 @@ Rectangle {
                     }
 
                     ThemedButton {
-                        text: "文件"
+                        text: qsTr("File")
                         onClicked: fileDialog.open()
                     }
 
                     ThemedButton {
-                        text: "文件夹"
+                        text: qsTr("Folder")
                         onClicked: folderDialog.open()
                     }
                 }
@@ -686,11 +686,11 @@ Rectangle {
                 RowLayout {
                     Layout.fillWidth: true
 
-                    Label { text: "有效期"; color: Theme.textColor }
+                    Label { text: qsTr("Validity"); color: Theme.textColor }
                     Item { Layout.fillWidth: true }
                     ThemedComboBox {
                         id: expireCombo
-                        model: ["24小时", "7天", "30天", "永不过期"]
+                        model: [qsTr("24 hours"), qsTr("7 days"), qsTr("30 days"), qsTr("Never expires")]
                         currentIndex: 0
                     }
                 }
@@ -698,11 +698,11 @@ Rectangle {
                 RowLayout {
                     Layout.fillWidth: true
 
-                    Label { text: "访问密码"; color: Theme.textColor }
+                    Label { text: qsTr("Access Password"); color: Theme.textColor }
                     Item { Layout.fillWidth: true }
                     TextField {
                         id: passwordInput
-                        placeholderText: "留空则无需密码"
+                        placeholderText: qsTr("Leave empty for no password")
                         echoMode: TextInput.Password
                         color: Theme.textColor
                         background: Rectangle {
@@ -722,7 +722,7 @@ Rectangle {
                     Item { Layout.fillWidth: true }
 
                     ThemedButton {
-                        text: "确定"
+                        text: qsTr("OK")
                         primary: true
                         onClicked: {
                             if (filePathInput.text.trim() !== "") {
@@ -749,7 +749,7 @@ Rectangle {
                     }
 
                     ThemedButton {
-                        text: "取消"
+                        text: qsTr("Cancel")
                         onClicked: shareDialog.close()
                     }
                 }
@@ -759,7 +759,7 @@ Rectangle {
 
     FileDialog {
         id: fileDialog
-        title: "选择文件"
+        title: qsTr("Select File")
         onAccepted: {
             var path = selectedFile.toString()
             if (path.startsWith("file:///")) {
@@ -772,7 +772,7 @@ Rectangle {
 
     FolderDialog {
         id: folderDialog
-        title: "选择文件夹"
+        title: qsTr("Select Folder")
         onAccepted: {
             var path = selectedFolder.toString()
             if (path.startsWith("file:///")) {
@@ -785,7 +785,7 @@ Rectangle {
 
     Dialog {
         id: qrCodeDialog
-        title: "分享二维码"
+        title: qsTr("Share QR Code")
         standardButtons: Dialog.Close
         modal: true
         width: 340
@@ -833,7 +833,7 @@ Rectangle {
 
             Label {
                 Layout.fillWidth: true
-                text: "扫描二维码访问分享"
+                text: qsTr("Scan QR code to access share")
                 color: Theme.textSecondary
                 font.pixelSize: 12
                 horizontalAlignment: Text.AlignHCenter
@@ -841,7 +841,7 @@ Rectangle {
 
             Button {
                 Layout.alignment: Qt.AlignHCenter
-                text: "复制链接"
+                text: qsTr("Copy Link")
                 contentItem: Label {
                     text: parent.text
                     color: "#ffffff"
@@ -877,7 +877,7 @@ Rectangle {
 
         Label {
             anchors.centerIn: parent
-            text: "✓ 已复制到剪贴板"
+            text: qsTr("✓ Copied to clipboard")
             color: "#ffffff"
             font.pixelSize: 13
         }

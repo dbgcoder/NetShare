@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NetShare - 文件分享</title>
+    <title data-i18n="title_share">NetShare - 文件分享</title>
     <style>
         :root {
             --bg-primary: #0f0f23;
@@ -170,8 +170,8 @@
     <div class="container">
         <div class="card" id="mainCard">
             <div class="icon" id="shareIcon">📂</div>
-            <h1 id="shareName">加载中...</h1>
-            <p class="subtitle" id="shareSubtitle">正在获取分享信息</p>
+            <h1 id="shareName" data-i18n="loading">加载中...</h1>
+            <p class="subtitle" id="shareSubtitle" data-i18n="fetching_info">正在获取分享信息</p>
 
             <div id="downloadBtns"></div>
 
@@ -185,8 +185,8 @@
 
             <div id="passwordSection" style="display:none">
                 <div class="password-form">
-                    <input type="password" id="pwInput" placeholder="输入访问密码">
-                    <button class="btn" onclick="submitPassword()">验证</button>
+                    <input type="password" id="pwInput" data-i18n-placeholder="enter_password" placeholder="输入访问密码">
+                    <button class="btn" onclick="submitPassword()" data-i18n="verify">验证</button>
                 </div>
             </div>
 
@@ -194,9 +194,9 @@
                 <div class="breadcrumb" id="breadcrumb"></div>
                 <table class="file-table">
                     <thead><tr>
-                        <th>名称</th>
-                        <th>大小</th>
-                        <th>操作</th>
+                        <th data-i18n="name">名称</th>
+                        <th data-i18n="size">大小</th>
+                        <th data-i18n="action">操作</th>
                     </tr></thead>
                     <tbody id="fileListBody"></tbody>
                 </table>
@@ -204,12 +204,74 @@
 
             <p class="footer">
                 <span class="ws-status disconnected" id="wsStatus"></span>
-                由 NetShare 提供
+                <span data-i18n="powered_by">由 NetShare 提供</span>
             </p>
         </div>
     </div>
 
 <script>
+var i18n = {
+    zh: {
+        title_share: 'NetShare - 文件分享',
+        loading: '加载中...',
+        fetching_info: '正在获取分享信息',
+        enter_password: '输入访问密码',
+        verify: '验证',
+        name: '名称',
+        size: '大小',
+        action: '操作',
+        powered_by: '由 NetShare 提供',
+        folder_share: '文件夹分享',
+        file_share: '文件分享',
+        download_zip: '打包下载 (ZIP)',
+        download_file: '下载文件',
+        load_failed: '加载失败'
+    },
+    en: {
+        title_share: 'NetShare - File Share',
+        loading: 'Loading...',
+        fetching_info: 'Fetching share info',
+        enter_password: 'Enter access password',
+        verify: 'Verify',
+        name: 'Name',
+        size: 'Size',
+        action: 'Action',
+        powered_by: 'Powered by NetShare',
+        folder_share: 'Folder Share',
+        file_share: 'File Share',
+        download_zip: 'Download (ZIP)',
+        download_file: 'Download File',
+        load_failed: 'Load Failed'
+    }
+};
+
+var currentLang = 'zh';
+
+function t(key) {
+    return (i18n[currentLang] && i18n[currentLang][key]) || (i18n.zh[key]) || key;
+}
+
+function applyI18n() {
+    var params = new URLSearchParams(window.location.search);
+    currentLang = params.get('lang') || 'zh';
+    if (!i18n[currentLang]) currentLang = 'zh';
+    document.documentElement.lang = currentLang === 'en' ? 'en' : 'zh-CN';
+    document.querySelectorAll('[data-i18n]').forEach(function(el) {
+        var key = el.getAttribute('data-i18n');
+        if (i18n[currentLang] && i18n[currentLang][key] !== undefined) {
+            el.textContent = i18n[currentLang][key];
+        }
+    });
+    document.querySelectorAll('[data-i18n-placeholder]').forEach(function(el) {
+        var key = el.getAttribute('data-i18n-placeholder');
+        if (i18n[currentLang] && i18n[currentLang][key] !== undefined) {
+            el.placeholder = i18n[currentLang][key];
+        }
+    });
+    document.title = t('title_share');
+}
+
+applyI18n();
 const token = location.pathname.replace('/s/', '').split('?')[0];
 let shareInfo = null;
 let currentSub = '';
@@ -244,13 +306,13 @@ async function loadShare() {
         const h1 = doc.querySelector('h1');
         if (h1) {
             document.getElementById('shareName').textContent = h1.textContent;
-            document.getElementById('shareSubtitle').textContent = '文件夹分享';
+            document.getElementById('shareSubtitle').textContent = t('folder_share');
             document.getElementById('shareIcon').textContent = '📂';
         }
         const downloadLink = doc.querySelector('a[href*="/download/"]');
         if (downloadLink) {
-            document.getElementById('shareName').textContent = h1 ? h1.textContent : '文件分享';
-            document.getElementById('shareSubtitle').textContent = '文件分享';
+            document.getElementById('shareName').textContent = h1 ? h1.textContent : t('file_share');
+            document.getElementById('shareSubtitle').textContent = t('file_share');
             document.getElementById('shareIcon').textContent = '📄';
         }
         const folderLink = doc.querySelector('a[href*="/folder/"]');
@@ -258,10 +320,10 @@ async function loadShare() {
 
         let btns = '';
         if (folderLink) {
-            btns += '<a class="btn" href="/folder/' + token + '" style="margin-right:8px">打包下载 (ZIP)</a>';
+            btns += '<a class="btn" href="/folder/' + token + '" style="margin-right:8px">' + t('download_zip') + '</a>';
         }
         if (downloadLink) {
-            btns += '<a class="btn" href="/download/' + token + '/">下载文件</a>';
+            btns += '<a class="btn" href="/download/' + token + '/">' + t('download_file') + '</a>';
         }
         document.getElementById('downloadBtns').innerHTML = btns;
 
@@ -285,7 +347,7 @@ async function loadShare() {
         document.getElementById('downloadBtns').style.display = 'block';
 
     } catch (e) {
-        document.getElementById('shareName').textContent = '加载失败';
+        document.getElementById('shareName').textContent = t('load_failed');
         document.getElementById('shareSubtitle').textContent = e.message;
     }
 }

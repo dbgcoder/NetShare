@@ -17,6 +17,7 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
 find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Network Sql Qml Quick QuickControls2 QuickDialogs2 Widgets)
+find_package(Qt6 6.8 REQUIRED COMPONENTS LinguistTools)
 
 # Global compile options
 if(MSVC)
