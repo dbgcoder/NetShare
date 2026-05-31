@@ -98,6 +98,15 @@ ShareInfo ShareManager::getShareInfo(const QString& token) const
     return m_shares.value(token);
 }
 
+QString ShareManager::createShareAuto(const QString& filePath, int expireHours,
+                                      int maxDownloads, const QString& password,
+                                      int source)
+{
+    QFileInfo fi(filePath);
+    bool isFolder = fi.isDir();
+    return createShare(filePath, isFolder, expireHours, maxDownloads, password, source);
+}
+
 bool ShareManager::validateShare(const QString& token, const QString& password) const
 {
     ShareInfo info = m_shares.value(token);

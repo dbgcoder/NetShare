@@ -69,6 +69,10 @@ public:
                        int expireHours = 24, int maxDownloads = 0,
                        const QString& password = QString(),
                        int source = 0);
+    Q_INVOKABLE QString createShareAuto(const QString& filePath,
+                         int expireHours = 24, int maxDownloads = 0,
+                         const QString& password = QString(),
+                         int source = 0);
     Q_INVOKABLE ShareInfo getShareInfo(const QString& token) const;
     Q_INVOKABLE bool validateShare(const QString& token, const QString& password = QString()) const;
     Q_INVOKABLE bool cancelShare(const QString& token);

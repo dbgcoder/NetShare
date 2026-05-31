@@ -568,7 +568,6 @@ private:
         BOOL darkMode = TRUE;
         DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &darkMode, sizeof(darkMode));
 
-        // Sheet of glass: extends DWM frame over entire window for drop shadow
         MARGINS margins = { -1, -1, -1, -1 };
         DwmExtendFrameIntoClientArea(hwnd, &margins);
 #endif

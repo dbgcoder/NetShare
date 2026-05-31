@@ -38,6 +38,85 @@ ApplicationWindow {
         }
     }
 
+    function addDroppedFiles(urls) {
+        if (typeof shareManager === 'undefined') return
+        for (var i = 0; i < urls.length; i++) {
+            var path = urls[i].toString()
+            if (path.startsWith("file:///")) {
+                path = path.substring(8)
+            } else if (path.startsWith("file://")) {
+                path = path.substring(7)
+            }
+            if (path === "") continue
+            shareManager.createShareAuto(path, 24, 0, "")
+        }
+        switchToPage(0)
+    }
+
+    DropArea {
+        id: dropArea
+        anchors.fill: parent
+        z: -1
+
+        property bool containsDragExternal: false
+
+        onEntered: function(drag) {
+            if (drag.hasUrls) {
+                drag.accepted = true
+                containsDragExternal = true
+            } else {
+                drag.accepted = false
+                containsDragExternal = false
+            }
+        }
+
+        onDropped: function(drop) {
+            containsDragExternal = false
+            if (drop.hasUrls) {
+                root.addDroppedFiles(drop.urls)
+            }
+        }
+
+        onExited: {
+            containsDragExternal = false
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            color: "#80000000"
+            visible: dropArea.containsDragExternal
+            z: 9999
+
+            Rectangle {
+                anchors.centerIn: parent
+                width: 300
+                height: 120
+                radius: 12
+                color: Theme.surfaceColor
+                border.color: Theme.accentColor
+                border.width: 2
+
+                ColumnLayout {
+                    anchors.centerIn: parent
+                    spacing: 8
+
+                    Label {
+                        text: "📁"
+                        font.pixelSize: 36
+                        Layout.alignment: Qt.AlignHCenter
+                    }
+
+                    Label {
+                        text: qsTr("拖放文件到发送列表")
+                        color: Theme.textColor
+                        font.pixelSize: 16
+                        Layout.alignment: Qt.AlignHCenter
+                    }
+                }
+            }
+        }
+    }
+
     Component.onCompleted: {
         console.log("MainWindow loaded")
     }
