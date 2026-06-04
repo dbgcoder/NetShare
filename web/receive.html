@@ -347,149 +347,9 @@
         <p class="footer" data-i18n="powered_by">由 NetShare 提供 <span class="ws-status" id="wsStatus"><span class="ws-dot" id="wsDot"></span><span id="wsText"></span></span></p>
     </div>
 
+<script src="common.js"></script>
 <script>
-var i18n = {
-    zh: {
-        title_send: 'NetShare - 发送文件',
-        send_file: '📤 发送文件',
-        send_file_subtitle: '选择文件发送到对方设备',
-        drag_drop_hint: '将文件或文件夹拖拽到此处',
-        select_file: '📄 选择文件',
-        select_folder: '📁 选择文件夹',
-        sending: '发送中...',
-        start_send: '开始发送',
-        retry_failed: '重试失败文件',
-        send_success: '文件发送成功！',
-        send_message: '💬 发送消息',
-        input_message: '输入消息内容...',
-        send: '发送',
-        powered_by: '由 NetShare 提供',
-        js_error: 'JS错误: ',
-        promise_error: 'Promise错误: ',
-        unknown_size: '未知大小',
-        file_count: '共 %1 个文件，总大小 %2',
-        upload_paused: '上传已暂停',
-        files_failed: '%1 个文件发送失败',
-        uploading: '发送中...',
-        completed: '已完成',
-        failed: '失败: ',
-        disconnected: '与服务端断开连接，请重试',
-        live_connection: '实时连接',
-        connection_lost: '连接断开',
-        conn_broken: '连接断开',
-        paused: '已暂停',
-        check_error: '检查接口返回错误: HTTP ',
-        check_failed: '检查上传状态失败: ',
-        upload_error: '上传过程出错: ',
-        resume_detected: '检测到未完成的上传，',
-        skip_files: '跳过%1个已完成文件',
-        resume_files: '续传%1个部分文件',
-        upload_paused_err: '上传已暂停',
-        network_error: '网络错误: ',
-        timeout: '超时: ',
-        resume_failed: '续传失败，服务端连续重启超过%1次，请重新上传',
-        unfinished_tasks: '检测到 %1 个未完成的上传任务，请选择相同文件后点击开始发送续传',
-        pending_tasks: '有未完成的任务，请选择文件后续传',
-        retry_check_failed: '重试检查失败: ',
-        finalizing: '正在完成...',
-        sent_count: '成功发送 %1 个文件！',
-        finalize_failed: '完成操作失败',
-        msg_send_failed: '消息发送失败',
-        msg_send_error: '消息发送失败: '
-    },
-    en: {
-        title_send: 'NetShare - Send Files',
-        send_file: '📤 Send Files',
-        send_file_subtitle: 'Select files to send to the other device',
-        drag_drop_hint: 'Drag and drop files or folders here',
-        select_file: '📄 Select Files',
-        select_folder: '📁 Select Folder',
-        sending: 'Sending...',
-        start_send: 'Start Sending',
-        retry_failed: 'Retry Failed Files',
-        send_success: 'Files sent successfully!',
-        send_message: '💬 Send Message',
-        input_message: 'Type a message...',
-        send: 'Send',
-        powered_by: 'Powered by NetShare',
-        js_error: 'JS Error: ',
-        promise_error: 'Promise Error: ',
-        unknown_size: 'Unknown size',
-        file_count: '%1 files, total %2',
-        upload_paused: 'Upload paused',
-        files_failed: '%1 file(s) failed to send',
-        uploading: 'Sending...',
-        completed: 'Completed',
-        failed: 'Failed: ',
-        disconnected: 'Disconnected from server, please retry',
-        live_connection: 'Live',
-        connection_lost: 'Connection lost',
-        conn_broken: 'Connection broken',
-        paused: 'Paused',
-        check_error: 'Check API error: HTTP ',
-        check_failed: 'Failed to check upload status: ',
-        upload_error: 'Upload error: ',
-        resume_detected: 'Unfinished upload detected, ',
-        skip_files: 'Skipped %1 completed file(s)',
-        resume_files: 'Resuming %1 partial file(s)',
-        upload_paused_err: 'Upload paused',
-        network_error: 'Network error: ',
-        timeout: 'Timeout: ',
-        resume_failed: 'Resume failed, server restarted more than %1 times, please re-upload',
-        unfinished_tasks: '%1 unfinished upload task(s) detected, select the same files and click Start to resume',
-        pending_tasks: 'Unfinished tasks exist, select files to resume',
-        retry_check_failed: 'Retry check failed: ',
-        finalizing: 'Finalizing...',
-        sent_count: 'Successfully sent %1 file(s)!',
-        finalize_failed: 'Finalize failed',
-        msg_send_failed: 'Failed to send message',
-        msg_send_error: 'Failed to send message: '
-    }
-};
-
-var currentLang = 'zh';
-
-function t(key) {
-    return (i18n[currentLang] && i18n[currentLang][key]) || (i18n.zh[key]) || key;
-}
-
-function tf(key) {
-    var args = Array.prototype.slice.call(arguments, 1);
-    var str = t(key);
-    for (var i = 0; i < args.length; i++) {
-        str = str.replace('%' + (i + 1), args[i]);
-    }
-    return str;
-}
-
-function applyI18n() {
-    var params = new URLSearchParams(window.location.search);
-    currentLang = params.get('lang') || 'zh';
-    if (!i18n[currentLang]) currentLang = 'zh';
-    document.documentElement.lang = currentLang === 'en' ? 'en' : 'zh-CN';
-    document.querySelectorAll('[data-i18n]').forEach(function(el) {
-        var key = el.getAttribute('data-i18n');
-        if (i18n[currentLang] && i18n[currentLang][key] !== undefined) {
-            el.textContent = i18n[currentLang][key];
-        }
-    });
-    document.querySelectorAll('[data-i18n-placeholder]').forEach(function(el) {
-        var key = el.getAttribute('data-i18n-placeholder');
-        if (i18n[currentLang] && i18n[currentLang][key] !== undefined) {
-            el.placeholder = i18n[currentLang][key];
-        }
-    });
-    document.title = t('title_send');
-}
-
-applyI18n();
-// ===== Global error handler =====
-window.onerror = function(msg, url, line, col, err) {
-    alert(t('js_error') + msg + ' (line ' + line + ')');
-};
-window.addEventListener('unhandledrejection', function(e) {
-    alert(t('promise_error') + (e.reason && e.reason.message ? e.reason.message : e.reason));
-});
+// Receive page uses common.js for i18n
 
 // ===== State =====
 var selectedFiles = []; // { file: File, relativePath: string }
@@ -520,6 +380,20 @@ var fileListEl = document.getElementById('fileList');
 var uploadBtn = document.getElementById('uploadBtn');
 var retryBtn = document.getElementById('retryBtn');
 var resumeHint = document.getElementById('resumeHint');
+
+// Initialize i18n first, then set up page
+applyI18n(function() {
+    document.title = t('title_send');
+    renderFileList();
+});
+
+// ===== Global error handler =====
+window.onerror = function(msg, url, line, col, err) {
+    alert(t('js_error') + msg + ' (line ' + line + ')');
+};
+window.addEventListener('unhandledrejection', function(e) {
+    alert(t('promise_error') + (e.reason && e.reason.message ? e.reason.message : e.reason));
+});
 
 // ===== WebSocket =====
 function connectWebSocket() {
@@ -738,7 +612,7 @@ function renderFileList() {
         div.innerHTML =
             '<div class="file-item-icon">📄</div>' +
             '<div class="file-item-info">' +
-                '<div class="file-item-name" title="' + escapeAttr(item.relativePath) + '">' + escapeHtml(item.relativePath) + '</div>' +
+                '<div class="file-item-name" title="' + escapeHtml(item.relativePath) + '">' + escapeHtml(item.relativePath) + '</div>' +
                 '<div class="file-item-size">' + (item.file ? formatSize(item.file.size) : t('unknown_size')) + '</div>' +
                 '<div class="file-item-progress"><div class="file-item-progress-fill" id="file-progress-' + i + '"></div></div>' +
                 '<div class="file-item-status" id="file-status-' + i + '"></div>' +
@@ -768,12 +642,7 @@ fileListEl.addEventListener('click', function(e) {
 });
 
 // ===== Utility =====
-function formatSize(b) {
-    if (b < 1024) return b + ' B';
-    if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
-    if (b < 1073741824) return (b / 1048576).toFixed(1) + ' MB';
-    return (b / 1073741824).toFixed(1) + ' GB';
-}
+// formatSize and escapeHtml are provided by common.js
 
 function calcUploadSpeed(currentBytes) {
     var now = Date.now();
@@ -787,14 +656,6 @@ function calcUploadSpeed(currentBytes) {
     var dt = (now - first.time) / 1000;
     if (dt < 0.3) return 0;
     return Math.round((currentBytes - first.bytes) / dt);
-}
-
-function escapeHtml(s) {
-    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
-
-function escapeAttr(s) {
-    return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 // ===== Upload logic =====

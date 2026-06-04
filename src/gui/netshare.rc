@@ -1,0 +1,4 @@
+// NetShare Application Icon Resource File
+// Windows executable icon embedding
+
+IDI_ICON1 ICON "netshare.ico"

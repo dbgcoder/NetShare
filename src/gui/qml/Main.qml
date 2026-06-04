@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Window
+import QtQuick.Effects
 import NetShare
 
 ApplicationWindow {
@@ -18,6 +19,15 @@ ApplicationWindow {
 
     color: Theme.backgroundColor
 
+    Overlay.modal: Rectangle {
+        color: Theme.overlayColor
+    }
+
+    palette.windowText: Theme.textColor
+    palette.window: Theme.surfaceColor
+    palette.toolTipBase: Theme.surfaceColor
+    palette.toolTipText: Theme.textColor
+
     property bool isSettingsPage: false
 
     function switchToPage(pageIndex) {
@@ -31,10 +41,26 @@ ApplicationWindow {
         root.requestActivate()
     }
 
+    function openMessagePage(address, name, isAnonymous) {
+        menuList.currentIndex = -1
+        root.isSettingsPage = true
+        stackView.replace(messagePage)
+        var msgPage = stackView.currentItem
+        if (msgPage && typeof msgPage.selectUser === 'function') {
+            msgPage.selectUser(address, name, isAnonymous)
+        }
+        root.show()
+        root.raise()
+        root.requestActivate()
+    }
+
     onClosing: function(close) {
-        if (typeof settingsManager !== 'undefined' && settingsManager.getBool("General/MinimizeToTray", true)) {
+        var minimizeToTray = typeof settingsManager !== 'undefined' && settingsManager.getBool("General/MinimizeToTray", true)
+        if (minimizeToTray) {
             close.accepted = false
             root.hide()
+        } else {
+            Qt.quit()
         }
     }
 
@@ -83,7 +109,7 @@ ApplicationWindow {
 
         Rectangle {
             anchors.fill: parent
-            color: "#80000000"
+            color: Theme.overlayColor
             visible: dropArea.containsDragExternal
             z: 9999
 
@@ -145,14 +171,28 @@ ApplicationWindow {
             }
         }
 
-        // App title
-        Label {
+        // App title with icon
+        RowLayout {
             anchors.left: parent.left
             anchors.leftMargin: 12
             anchors.verticalCenter: parent.verticalCenter
-            text: root.title
-            color: Theme.textSecondary
-            font.pixelSize: 12
+            spacing: 6
+
+            Image {
+                source: "qrc:/icons/netshare.png"
+                width: 16
+                height: 16
+                sourceSize.width: 16
+                sourceSize.height: 16
+                fillMode: Image.PreserveAspectFit
+                smooth: true
+            }
+
+            Label {
+                text: root.title
+                color: Theme.textSecondary
+                font.pixelSize: 12
+            }
         }
 
         // Message button
@@ -162,7 +202,7 @@ ApplicationWindow {
             anchors.verticalCenter: parent.verticalCenter
             width: 46
             height: titleBar.height
-            color: messageMouseArea.containsMouse ? "#3e3e42" : "transparent"
+            color: messageMouseArea.containsMouse ? Theme.hoverColor : "transparent"
 
             Label {
                 anchors.centerIn: parent
@@ -190,7 +230,7 @@ ApplicationWindow {
                         return c > 99 ? "99+" : c
                     }
                     font.pixelSize: 9
-                    color: "#ffffff"
+                    color: Theme.textOnAccentColor
                 }
             }
 
@@ -214,7 +254,7 @@ ApplicationWindow {
             anchors.verticalCenter: parent.verticalCenter
             width: 46
             height: titleBar.height
-            color: settingsMouseArea.containsMouse ? "#3e3e42" : "transparent"
+            color: settingsMouseArea.containsMouse ? Theme.hoverColor : "transparent"
 
             Label {
                 anchors.centerIn: parent
@@ -243,7 +283,7 @@ ApplicationWindow {
             anchors.verticalCenter: parent.verticalCenter
             width: 46
             height: titleBar.height
-            color: minMouseArea.containsMouse ? "#3e3e42" : "transparent"
+            color: minMouseArea.containsMouse ? Theme.hoverColor : "transparent"
 
             Rectangle {
                 anchors.centerIn: parent
@@ -267,7 +307,7 @@ ApplicationWindow {
             anchors.verticalCenter: parent.verticalCenter
             width: 46
             height: titleBar.height
-            color: maxMouseArea.containsMouse ? "#3e3e42" : "transparent"
+            color: maxMouseArea.containsMouse ? Theme.hoverColor : "transparent"
 
             Rectangle {
                 anchors.centerIn: parent
@@ -296,7 +336,7 @@ ApplicationWindow {
             anchors.verticalCenter: parent.verticalCenter
             width: 46
             height: titleBar.height
-            color: closeMouseArea.containsMouse ? "#e81123" : "transparent"
+            color: closeMouseArea.containsMouse ? Theme.closeHoverColor : "transparent"
 
             // X icon
             Rectangle {
@@ -430,7 +470,7 @@ ApplicationWindow {
                     radius: 4
                     color: {
                         if (ListView.isCurrentItem) return Theme.accentColor
-                        if (navMouseArea.containsMouse) return "#3e3e42"
+                        if (navMouseArea.containsMouse) return Theme.hoverColor
                         return "transparent"
                     }
 
@@ -461,11 +501,22 @@ ApplicationWindow {
 
                             Component {
                                 id: svgIconComponent
-                                Image {
-                                    source: iconSource
-                                    sourceSize.width: 18
-                                    sourceSize.height: 18
-                                    opacity: isSelected ? 1.0 : 0.7
+                                Item {
+                                    width: 18
+                                    height: 18
+                                    Image {
+                                        id: svgIcon
+                                        source: iconSource
+                                        sourceSize.width: 18
+                                        sourceSize.height: 18
+                                        visible: false
+                                    }
+                                    MultiEffect {
+                                        anchors.fill: svgIcon
+                                        source: svgIcon
+                                        colorization: 1.0
+                                        colorizationColor: isSelected ? Theme.textOnAccentColor : Theme.textColor
+                                    }
                                 }
                             }
 
@@ -474,14 +525,14 @@ ApplicationWindow {
                                 Label {
                                     text: iconSource
                                     font.pixelSize: 18
-                                    color: isSelected ? "#ffffff" : Theme.textColor
+                                    color: isSelected ? Theme.textOnAccentColor : Theme.textColor
                                 }
                             }
                         }
 
                         Label {
                             text: title
-                            color: ListView.isCurrentItem ? "#ffffff" : Theme.textColor
+                            color: ListView.isCurrentItem ? Theme.textOnAccentColor : Theme.textColor
                             font.pixelSize: 14
                         }
 
@@ -533,7 +584,9 @@ ApplicationWindow {
 
     Component {
         id: devicePage
-        DeviceDiscovery {}
+        DeviceDiscovery {
+            mainWindow: root
+        }
     }
 
     Component {

@@ -16,7 +16,7 @@ Rectangle {
         width: 32
         height: 32
         radius: 4
-        color: closeMsgBtn.containsMouse ? "#3e3e42" : "transparent"
+        color: closeMsgBtn.containsMouse ? Theme.hoverColor : "transparent"
         z: 10
 
         Rectangle {
@@ -212,7 +212,7 @@ Rectangle {
                         width: userListView.width
                         height: 64
                         color: selectedUserAddress === model.address ? Theme.accentColor :
-                               (userMouseArea.containsMouse ? "#3e3e42" : "transparent")
+                               (userMouseArea.containsMouse ? Theme.hoverColor : "transparent")
 
                         MouseArea {
                             id: userMouseArea
@@ -245,7 +245,7 @@ Rectangle {
                                     Label {
                                         text: model.name
                                         font.pixelSize: 14
-                                        color: selectedUserAddress === model.address ? "#ffffff" : Theme.textColor
+                                        color: selectedUserAddress === model.address ? Theme.textOnAccentColor : Theme.textColor
                                         elide: Text.ElideRight
                                         Layout.fillWidth: true
                                     }
@@ -260,7 +260,7 @@ Rectangle {
                                             anchors.centerIn: parent
                                             text: model.unreadCount > 99 ? "99+" : model.unreadCount
                                             font.pixelSize: 10
-                                            color: "#ffffff"
+                                            color: Theme.textOnAccentColor
                                         }
                                     }
                                 }
@@ -268,7 +268,7 @@ Rectangle {
                                 Label {
                                     text: model.lastMessage || model.address
                                     font.pixelSize: 11
-                                    color: selectedUserAddress === model.address ? "#cccccc" : Theme.textSecondary
+                                    color: selectedUserAddress === model.address ? Theme.textOnAccentSecondaryColor : Theme.textSecondary
                                     elide: Text.ElideRight
                                     Layout.fillWidth: true
                                 }
@@ -376,7 +376,7 @@ Rectangle {
                                     Layout.fillWidth: true
                                     text: model.content
                                     font.pixelSize: 14
-                                    color: model.isSent ? "#ffffff" : Theme.textColor
+                                    color: model.isSent ? Theme.textOnAccentColor : Theme.textColor
                                     wrapMode: TextEdit.Wrap
                                     readOnly: true
                                     selectByMouse: true
@@ -394,7 +394,7 @@ Rectangle {
                                         return ts
                                     }
                                     font.pixelSize: 10
-                                    color: model.isSent ? "#cccccc" : Theme.textSecondary
+                                    color: model.isSent ? Theme.textOnAccentSecondaryColor : Theme.textSecondary
                                     horizontalAlignment: Text.Right
                                 }
                             }
@@ -419,6 +419,9 @@ Rectangle {
                             Layout.fillWidth: true
                             placeholderText: qsTr("输入消息...")
                             color: Theme.textColor
+                            placeholderTextColor: Theme.textSecondary
+                            selectionColor: Theme.accentColor
+                            selectedTextColor: Theme.textOnAccentColor
                             font.pixelSize: 14
 
                             background: Rectangle {
@@ -439,7 +442,7 @@ Rectangle {
 
                             contentItem: Label {
                                 text: parent.text
-                                color: parent.enabled ? "#ffffff" : Theme.textSecondary
+                                color: parent.enabled ? Theme.textOnAccentColor : Theme.textSecondary
                                 horizontalAlignment: Text.AlignHCenter
                                 font.pixelSize: 14
                             }

@@ -79,6 +79,11 @@ if exist "%PROJECT_ROOT%\scripts\init_db.sql" (
     copy "%PROJECT_ROOT%\scripts\init_db.sql" "%PACKAGE_DIR%\" >nul
 )
 
+REM Copy theme files for external theme loading
+echo Copying theme files...
+if not exist "%PACKAGE_DIR%\themes" mkdir "%PACKAGE_DIR%\themes"
+copy "%PROJECT_ROOT%\src\gui\qml\themes\*.json" "%PACKAGE_DIR%\themes\" >nul 2>&1
+
 echo.
 echo === Package created at: %PACKAGE_DIR% ===
 echo.

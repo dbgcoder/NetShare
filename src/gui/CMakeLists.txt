@@ -51,6 +51,9 @@ qt_add_qml_module(${NETSHARE_GUI_MODULE_NAME}
         qml/icons/receive.svg
         qml/icons/transfer.svg
         qml/icons/lan.svg
+        icons/netshare.png
+        qml/themes/dark.json
+        qml/themes/light.json
 )
 
 # =============================================================================
@@ -71,6 +74,7 @@ target_link_libraries(${NETSHARE_GUI_MODULE_NAME} PUBLIC
     Qt6::Quick
     Qt6::QuickControls2
     Qt6::QuickDialogs2
+    Qt6::QuickEffectsPrivate
     NetshareCore
     NetshareQrcode
 )

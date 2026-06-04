@@ -1,5 +1,10 @@
 #include "SettingsManager.h"
 #include <QDir>
+#include <QCoreApplication>
+
+#ifdef Q_OS_WIN
+#include <QSettings>
+#endif
 
 SettingsManager::SettingsManager(QObject* parent)
     : QObject(parent)
@@ -95,4 +100,31 @@ QString SettingsManager::getUploadPath() const
 void SettingsManager::setUploadPath(const QString& path)
 {
     m_settings->setValue("Paths/UploadDir", path);
+}
+
+bool SettingsManager::isAutoStartEnabled() const
+{
+#ifdef Q_OS_WIN
+    QSettings reg("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+                  QSettings::NativeFormat);
+    return reg.value("NetShare").toString() ==
+           QDir::toNativeSeparators(QCoreApplication::applicationFilePath());
+#else
+    return false;
+#endif
+}
+
+void SettingsManager::setAutoStartEnabled(bool enabled)
+{
+#ifdef Q_OS_WIN
+    QSettings reg("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+                  QSettings::NativeFormat);
+    if (enabled) {
+        reg.setValue("NetShare", QDir::toNativeSeparators(QCoreApplication::applicationFilePath()));
+    } else {
+        reg.remove("NetShare");
+    }
+#else
+    Q_UNUSED(enabled)
+#endif
 }

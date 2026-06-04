@@ -2,6 +2,7 @@
 #include "Logger.h"
 
 #include <QByteArray>
+#include <QCoreApplication>
 #include <QDateTime>
 #include <QFile>
 #include <QHostAddress>
@@ -42,6 +43,8 @@ bool CivetWebServer::start(quint16 port, const QString& bindAddress)
         QStringLiteral("decode_url"), QStringLiteral("yes"),
         QStringLiteral("max_request_size"), QStringLiteral("16384"),
         QStringLiteral("access_control_allow_origin"), QStringLiteral("*"),
+        QStringLiteral("document_root"),
+        QCoreApplication::applicationDirPath() + QStringLiteral("/web"),
     };
 
     if (m_tlsEnabled && !m_certPath.isEmpty() && !m_keyPath.isEmpty()) {
@@ -308,6 +311,22 @@ void CivetWebServer::unsubscribeClientFromAll(mg_connection* conn)
 int CivetWebServer::connectedClientCount() const
 {
     return m_wsSubscriptions.size();
+}
+
+QVariantList CivetWebServer::getConnectedClientsList() const
+{
+    QVariantList result;
+    QSet<QString> seenIps;
+    for (auto it = m_connToIp.constBegin(); it != m_connToIp.constEnd(); ++it) {
+        QString ip = it.value();
+        if (ip.isEmpty() || seenIps.contains(ip)) continue;
+        seenIps.insert(ip);
+        QVariantMap entry;
+        entry[QStringLiteral("address")] = ip;
+        entry[QStringLiteral("port")] = m_port;
+        result.append(entry);
+    }
+    return result;
 }
 
 void CivetWebServer::setSslCertificate(const QString& certPath, const QString& keyPath)

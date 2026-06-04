@@ -116,7 +116,6 @@ private:
     int handleFolderDownload(mg_connection* conn, const HttpRequestInfo& info);
     int handleApiShares(mg_connection* conn, const HttpRequestInfo& info);
     int handleApiFiles(mg_connection* conn, const HttpRequestInfo& info);
-    int handleUploadPage(mg_connection* conn, const HttpRequestInfo& info);
 
     int handleStreamingUpload(mg_connection* conn, const HttpRequestInfo& info,
                               const QByteArray& chunk, bool isLast);
@@ -134,13 +133,8 @@ private:
     int handleChatMessage(mg_connection* conn, const HttpRequestInfo& info);
     void cleanupExpiredSessions();
 
-    QByteArray generateSharePage(const QString& token, const QString& filePath, bool isFolder, const QString& lang) const;
-    QByteArray generatePasswordPage(const QString& token, const QString& lang) const;
-    QByteArray generateErrorPage(const QString& lang) const;
-    QByteArray generateUploadPage(const QString& token, const QString& lang) const;
-
     QString langParam(const HttpRequestInfo& info) const;
-    QString htmlI18nDict(const QString& lang) const;
+    QString loadWebFile(const QString& fileName, const QMap<QString, QString>& vars = QMap<QString, QString>()) const;
 
     QString mimeTypeForFile(const QString& fileName) const;
     QList<UploadedFile> parseMultipartFormData(const QByteArray& body, const QString& contentType) const;

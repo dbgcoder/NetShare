@@ -12,7 +12,10 @@ set(WEB_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 # HTML 文件
 # =============================================================================
 set(WEB_HTML_FILES
-    index.html
+    home.html
+    share.html
+    password.html
+    error.html
     receive.html
 )
 
@@ -50,6 +53,7 @@ endforeach()
 # 自定义目标：复制 Web 资源
 # =============================================================================
 add_custom_target(netshare_web_assets ALL
+    COMMAND ${CMAKE_COMMAND} -E rm -rf $<TARGET_FILE_DIR:NetShare>/web
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         ${WEB_DIR}
         $<TARGET_FILE_DIR:NetShare>/web

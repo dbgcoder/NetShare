@@ -1,4 +1,4 @@
-#include "RequestHandler.h"
+﻿#include "RequestHandler.h"
 #include "ShareManager.h"
 #include "FileBrowser.h"
 #include "FolderPacker.h"
@@ -133,17 +133,15 @@ void RequestHandler::registerRoutes(CivetWebServer* server)
     m_civetServer = server;
 
     server->addRoute("GET", "/", [this](mg_connection* conn, const HttpRequestInfo& info) {
-        Q_UNUSED(info)
         QString lang = langParam(info);
-        QString service = (lang == "en") ? "LAN File Sharing Service" : "局域网文件分享服务";
-        QString useLink = (lang == "en") ? "Please use a share link to access specific content" : "请使用分享链接访问具体分享内容";
-        CivetWebServer::sendHtmlResponse(conn, 200,
-            QString("<html><head><meta charset='utf-8'><title>NetShare</title></head>"
-            "<body style='font-family:system-ui,sans-serif;text-align:center;padding:80px 20px;background:#1a1a2e;color:#eee'>"
-            "<h1 style='font-size:3em;color:#e94560'>NetShare</h1>"
-            "<p style='font-size:1.2em;color:#aaa'>%1</p>"
-            "<p style='color:#666;margin-top:40px'>%2</p></body></html>")
-            .arg(service, useLink).toUtf8());
+        QMap<QString, QString> vars;
+        vars["LANG"] = lang;
+        QString html = loadWebFile("home.html", vars);
+        if (html.isEmpty()) {
+            CivetWebServer::sendHtmlResponse(conn, 500, QByteArrayLiteral("Failed to load home page"));
+            return 500;
+        }
+        CivetWebServer::sendHtmlResponse(conn, 200, html.toUtf8());
         return 200;
     });
 
@@ -171,37 +169,15 @@ void RequestHandler::registerRoutes(CivetWebServer* server)
         return handleApiFiles(conn, info);
     });
 
-    server->addRoute("GET", "/receive", [](mg_connection* conn, const HttpRequestInfo& info) {
+    server->addRoute("GET", "/receive", [this](mg_connection* conn, const HttpRequestInfo& info) {
         Q_UNUSED(info)
-        QStringList paths = { "web/receive.html",
-            QCoreApplication::applicationDirPath() + "/web/receive.html" };
-        QByteArray page;
-        for (const auto& p : paths) {
-            QFile f(p);
-            if (f.open(QIODevice::ReadOnly)) {
-                page = f.readAll();
-                f.close();
-                LOG_INFO("Serving receive page from %s, size=%d bytes", qPrintable(p), page.size());
-                break;
-            }
-        }
-        if (page.isEmpty()) {
+        QString html = loadWebFile("receive.html");
+        if (html.isEmpty()) {
             CivetWebServer::sendHtmlResponse(conn, 500, QByteArrayLiteral("\xe6\x97\xa0\xe6\xb3\x95\xe5\x8a\xa0\xe8\xbd\xbd\xe6\x8e\xa5\xe6\x94\xb6\xe9\xa1\xb5\xe9\x9d\xa2"));
             return 500;
         }
-        mg_printf(conn,
-            "HTTP/1.1 200 OK\r\n"
-            "Content-Type: text/html; charset=utf-8\r\n"
-            "Cache-Control: no-cache, no-store, must-revalidate\r\n"
-            "Pragma: no-cache\r\n"
-            "Expires: 0\r\n"
-            "Content-Length: %d\r\n\r\n", page.size());
-        mg_write(conn, page.constData(), page.size());
+        CivetWebServer::sendHtmlResponse(conn, 200, html.toUtf8());
         return 200;
-    });
-
-    server->addRoute("GET", "/upload/*", [this](mg_connection* conn, const HttpRequestInfo& info) {
-        return handleUploadPage(conn, info);
     });
 
     server->addStreamingRoute("POST", "/receive", [this](mg_connection* conn, const HttpRequestInfo& info,
@@ -317,7 +293,9 @@ int RequestHandler::handleSharePage(mg_connection* conn, const HttpRequestInfo& 
     ShareInfo shareInfo = m_shareManager->getShareInfo(token);
     if (!shareInfo.isValid() || shareInfo.isExpired()) {
         LOG_WARN("Share access rejected: token=%s", qPrintable(token));
-        CivetWebServer::sendHtmlResponse(conn, 200, generateErrorPage(lang));
+        QMap<QString, QString> vars;
+        vars["LANG"] = lang;
+        CivetWebServer::sendHtmlResponse(conn, 200, loadWebFile("error.html", vars).toUtf8());
         return 200;
     }
 
@@ -325,13 +303,22 @@ int RequestHandler::handleSharePage(mg_connection* conn, const HttpRequestInfo& 
         auto qp = parseQueryString(info.queryString);
         QString pw = qp.value("pw");
         if (pw.isEmpty() || !m_shareManager->validateShare(token, pw)) {
-            CivetWebServer::sendHtmlResponse(conn, 200, generatePasswordPage(token, lang));
+            QMap<QString, QString> vars;
+            vars["TOKEN"] = token;
+            vars["LANG"] = lang;
+            CivetWebServer::sendHtmlResponse(conn, 200, loadWebFile("password.html", vars).toUtf8());
             return 200;
         }
     }
 
     m_shareManager->shareAccessed(token);
-    CivetWebServer::sendHtmlResponse(conn, 200, generateSharePage(token, shareInfo.filePath, shareInfo.isFolder, lang));
+    QFileInfo fi(shareInfo.filePath);
+    QMap<QString, QString> vars;
+    vars["TOKEN"] = token;
+    vars["LANG"] = lang;
+    vars["IS_FOLDER"] = shareInfo.isFolder ? "true" : "false";
+    vars["FOLDER_NAME"] = fi.fileName();
+    CivetWebServer::sendHtmlResponse(conn, 200, loadWebFile("share.html", vars).toUtf8());
     return 200;
 }
 
@@ -592,14 +579,6 @@ int RequestHandler::handleApiFiles(mg_connection* conn, const HttpRequestInfo& i
     }
     json.append("]");
     CivetWebServer::sendJsonResponse(conn, 200, json);
-    return 200;
-}
-
-int RequestHandler::handleUploadPage(mg_connection* conn, const HttpRequestInfo& info)
-{
-    QString lang = langParam(info);
-    QString token = info.uri.mid(8);
-    CivetWebServer::sendHtmlResponse(conn, 200, generateUploadPage(token, lang));
     return 200;
 }
 
@@ -1789,462 +1768,33 @@ QString RequestHandler::langParam(const HttpRequestInfo& info) const
 {
     auto qp = parseQueryString(info.queryString);
     if (qp.value("lang") == "en") return "en";
+    // Use software language setting
+    if (m_settingsManager) {
+        int langIndex = m_settingsManager->value("General/Language", 0).toInt();
+        if (langIndex == 1) return "en";
+    }
     return "zh";
 }
 
-QString RequestHandler::htmlI18nDict(const QString& lang) const
+QString RequestHandler::loadWebFile(const QString& fileName, const QMap<QString, QString>& vars) const
 {
-    QString zh = "{"
-        "'lan_service':'局域网文件分享服务',"
-        "'lan_use_link':'请使用分享链接访问具体分享内容',"
-        "'lan_download':'下载',"
-        "'lan_download_zip':'打包下载 (ZIP)',"
-        "'lan_download_file':'下载文件',"
-        "'lan_direct_download':'直接下载',"
-        "'lan_folder_share':'文件夹分享',"
-        "'lan_file_share':'文件分享',"
-        "'lan_file_list':'文件列表',"
-        "'lan_name':'名称',"
-        "'lan_size':'大小',"
-        "'lan_action':'操作',"
-        "'lan_upload_file':'上传文件',"
-        "'lan_powered_by':'由 NetShare 提供',"
-        "'lan_preparing':'准备中...',"
-        "'lan_cancel':'取消',"
-        "'lan_fetching_info':'获取文件信息...',"
-        "'lan_fetch_failed':'获取文件信息失败',"
-        "'lan_no_resume':'服务器不支持断点续传，使用直接下载',"
-        "'lan_large_file':'文件较大',"
-        "'lan_suggest_manager':'建议使用下载管理器',"
-        "'lan_file_size':'文件大小: ',"
-        "'lan_error':'错误: ',"
-        "'lan_resuming':'续传中... ',"
-        "'lan_downloaded':' 已下载',"
-        "'lan_downloading':'下载中...',"
-        "'lan_dl_failed':'下载失败: HTTP ',"
-        "'lan_interrupted':'下载中断，点击下载按钮继续',"
-        "'lan_cancelled_resume':'已取消，点击下载按钮继续',"
-        "'lan_interrupted_msg':'下载中断: ',"
-        "'lan_saving':'保存中...',"
-        "'lan_complete':'下载完成!',"
-        "'lan_pwd_title':'密码验证',"
-        "'lan_pwd_required':'该分享需要密码',"
-        "'lan_enter_pwd':'请输入访问密码',"
-        "'lan_pwd_placeholder':'输入密码',"
-        "'lan_verify':'验证',"
-        "'lan_upload_title':'上传文件',"
-        "'lan_upload_subtitle':'选择文件或文件夹上传到局域网分享',"
-        "'lan_drag_here':'将文件或文件夹拖拽到此处',"
-        "'lan_select_file':'📄 选择文件',"
-        "'lan_select_folder':'📁 选择文件夹',"
-        "'lan_uploading':'上传中...',"
-        "'lan_start_upload':'开始上传',"
-        "'lan_upload_success':'上传成功！',"
-        "'lan_upload_files':'上传 ',"
-        "'lan_files_unit':' 个文件 (',"
-        "'lan_prepare_upload':'准备上传...',"
-        "'lan_upload_complete':'上传完成',"
-        "'lan_view_share':'查看分享页面',"
-        "'lan_uploading_n':'正在上传 ',"
-        "'lan_upload_failed':'上传失败: ',"
-        "'lan_network_error':'网络错误',"
-        "'lan_n_files':'%1个文件',"
-        "'lan_error_share_not_exist':'分享不存在',"
-        "'lan_error_share_invalid':'该分享链接无效或已过期'"
-    "}";
-
-    QString en = "{"
-        "'lan_service':'LAN File Sharing Service',"
-        "'lan_use_link':'Please use a share link to access specific content',"
-        "'lan_download':'Download',"
-        "'lan_download_zip':'Download (ZIP)',"
-        "'lan_download_file':'Download File',"
-        "'lan_direct_download':'Direct Download',"
-        "'lan_folder_share':'Folder Share',"
-        "'lan_file_share':'File Share',"
-        "'lan_file_list':'File List',"
-        "'lan_name':'Name',"
-        "'lan_size':'Size',"
-        "'lan_action':'Action',"
-        "'lan_upload_file':'Upload File',"
-        "'lan_powered_by':'Powered by NetShare',"
-        "'lan_preparing':'Preparing...',"
-        "'lan_cancel':'Cancel',"
-        "'lan_fetching_info':'Fetching file info...',"
-        "'lan_fetch_failed':'Failed to fetch file info',"
-        "'lan_no_resume':'Server does not support resume, using direct download',"
-        "'lan_large_file':'Large file',"
-        "'lan_suggest_manager':'a download manager is recommended',"
-        "'lan_file_size':'File size: ',"
-        "'lan_error':'Error: ',"
-        "'lan_resuming':'Resuming... ',"
-        "'lan_downloaded':' downloaded',"
-        "'lan_downloading':'Downloading...',"
-        "'lan_dl_failed':'Download failed: HTTP ',"
-        "'lan_interrupted':'Download interrupted, click download to continue',"
-        "'lan_cancelled_resume':'Cancelled, click download to continue',"
-        "'lan_interrupted_msg':'Download interrupted: ',"
-        "'lan_saving':'Saving...',"
-        "'lan_complete':'Download complete!',"
-        "'lan_pwd_title':'Password Verification',"
-        "'lan_pwd_required':'This share requires a password',"
-        "'lan_enter_pwd':'Please enter the access password',"
-        "'lan_pwd_placeholder':'Enter password',"
-        "'lan_verify':'Verify',"
-        "'lan_upload_title':'Upload File',"
-        "'lan_upload_subtitle':'Select files or folders to upload to LAN share',"
-        "'lan_drag_here':'Drag files or folders here',"
-        "'lan_select_file':'📄 Select Files',"
-        "'lan_select_folder':'📁 Select Folder',"
-        "'lan_uploading':'Uploading...',"
-        "'lan_start_upload':'Start Upload',"
-        "'lan_upload_success':'Upload successful!',"
-        "'lan_upload_files':'Upload ',"
-        "'lan_files_unit':' files (',"
-        "'lan_prepare_upload':'Preparing upload...',"
-        "'lan_upload_complete':'Upload complete',"
-        "'lan_view_share':'View share page',"
-        "'lan_uploading_n':'Uploading ',"
-        "'lan_upload_failed':'Upload failed: ',"
-        "'lan_network_error':'Network error',"
-        "'lan_n_files':'%1 files',"
-        "'lan_error_share_not_exist':'Share Not Found',"
-        "'lan_error_share_invalid':'This share link is invalid or has expired'"
-    "}";
-
-    return (lang == "en") ? en : zh;
-}
-
-QByteArray RequestHandler::generateSharePage(const QString& token, const QString& filePath, bool isFolder, const QString& lang) const
-{
-    QFileInfo fi(filePath);
-    QString folderName = fi.fileName();
-    QString i18nDict = htmlI18nDict(lang);
-
-    QString fileListHtml;
-    if (isFolder) {
-        QVariantList entries = m_fileBrowser->listDirectory(filePath);
-        for (const QVariant& v : entries) {
-            FileEntry entry = v.value<FileEntry>();
-            QString icon = entry.isFolder ? "\xf0\x9f\x93\x81" : "\xf0\x9f\x93\x84";
-            QString sizeStr = entry.isFolder ? "" : entry.displaySize;
-            QString downloadLink;
-            if (entry.isFolder) {
-                downloadLink = QString("/s/%1?sub=%2&lang=%3").arg(token, QUrl::toPercentEncoding(entry.name), lang);
-            } else {
-                downloadLink = QString("/download/%1/%2").arg(token, QUrl::toPercentEncoding(entry.name));
-            }
-            fileListHtml += QString(
-                "<tr>"
-                "<td style='padding:10px 16px;border-bottom:1px solid #2a2a3e'>%1 %2</td>"
-                "<td style='padding:10px 16px;border-bottom:1px solid #2a2a3e;color:#888'>%3</td>"
-                "<td style='padding:10px 16px;border-bottom:1px solid #2a2a3e'>"
-                "<a href='%4' style='color:#e94560;text-decoration:none'>"+QString("'+t('lan_download')+'")+"</a></td>"
-                "</tr>").arg(icon, entry.name, sizeStr, downloadLink);
+    QStringList paths = { "web/" + fileName,
+        QCoreApplication::applicationDirPath() + "/web/" + fileName };
+    QString html;
+    for (const auto& p : paths) {
+        QFile f(p);
+        if (f.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            html = QString::fromUtf8(f.readAll());
+            f.close();
+            break;
         }
     }
-
-    QString downloadBtn;
-    if (isFolder) {
-        downloadBtn = QString("<a href='/folder/%1' style='display:inline-block;padding:14px 40px;background:#e94560;"
-                              "color:#fff;text-decoration:none;border-radius:8px;font-size:16px;font-weight:bold'>"
-                              "'+t('lan_download_zip')+'</a>").arg(token);
-    } else {
-        downloadBtn = QString(
-            "<button onclick='startDownload(\"/download/%1/\")' "
-            "style='display:inline-block;padding:14px 40px;background:#e94560;"
-            "color:#fff;border:none;border-radius:8px;font-size:16px;font-weight:bold;cursor:pointer'>"
-            "'+t('lan_download_file')+'</button>"
-            "<a href='/download/%1/' style='display:inline-block;margin-left:10px;padding:14px 20px;background:#333;"
-            "color:#aaa;text-decoration:none;border-radius:8px;font-size:14px'>'+t('lan_direct_download')+'</a>").arg(token);
+    if (html.isEmpty()) return html;
+    // Replace {{KEY}} placeholders
+    for (auto it = vars.constBegin(); it != vars.constEnd(); ++it) {
+        html.replace("{{" + it.key() + "}}", it.value());
     }
-
-    QString fileListSection;
-    if (isFolder) {
-        fileListSection = QString(
-            "<div style='margin-top:30px'>"
-            "<h3 style='color:#ccc;font-size:16px;margin-bottom:12px'>'+t('lan_file_list')+'</h3>"
-            "<table style='width:100%;border-collapse:collapse;background:#1a1a2e;border-radius:8px;overflow:hidden'>"
-            "<thead><tr style='background:#16213e'>"
-            "<th style='padding:12px 16px;text-align:left;color:#aaa;font-size:13px'>'+t('lan_name')+'</th>"
-            "<th style='padding:12px 16px;text-align:left;color:#aaa;font-size:13px'>'+t('lan_size')+'</th>"
-            "<th style='padding:12px 16px;text-align:left;color:#aaa;font-size:13px'>'+t('lan_action')+'</th>"
-            "</tr></thead>"
-            "<tbody>%1</tbody></table></div>").arg(fileListHtml);
-    }
-
-    QString progressSection =
-        "<div id='dl-progress' style='display:none;margin-top:20px;text-align:left'>"
-        "<div style='background:#1a1a2e;border-radius:8px;padding:16px'>"
-        "<div style='display:flex;justify-content:space-between;margin-bottom:8px'>"
-        "<span id='dl-status' style='color:#e94560;font-size:14px'>'+t('lan_preparing')+'</span>"
-        "<span id='dl-speed' style='color:#888;font-size:14px'></span></div>"
-        "<div style='background:#0f0f23;border-radius:4px;height:8px;overflow:hidden'>"
-        "<div id='dl-bar' style='background:#e94560;height:100%;width:0%;transition:width 0.3s'></div></div>"
-        "<div style='display:flex;justify-content:space-between;margin-top:8px'>"
-        "<span id='dl-size' style='color:#888;font-size:12px'></span>"
-        "<span id='dl-percent' style='color:#888;font-size:12px'>0%</span></div>"
-        "<button id='dl-cancel-btn' onclick='cancelDownload()' "
-        "style='margin-top:12px;padding:8px 20px;background:#555;color:#fff;border:none;"
-        "border-radius:6px;font-size:13px;cursor:pointer;display:none'>'+t('lan_cancel')+'</button></div></div>";
-
-    QString langSuffix = (lang == "en") ? "&lang=en" : "";
-
-    return QString(
-        "<!DOCTYPE html><html><head><meta charset='utf-8'>"
-        "<meta name='viewport' content='width=device-width,initial-scale=1'>"
-        "<title>NetShare - %1</title></head>"
-        "<body style='font-family:system-ui,-apple-system,sans-serif;background:#0f0f23;color:#eee;"
-        "margin:0;padding:0;min-height:100vh;display:flex;align-items:center;justify-content:center'>"
-        "<div style='max-width:640px;width:100%;padding:20px'>"
-        "<div style='background:#16213e;border-radius:16px;padding:40px;text-align:center'>"
-        "<div style='font-size:48px;margin-bottom:16px'>%2</div>"
-        "<h1 style='font-size:24px;margin:0 0 8px'>%1</h1>"
-        "<p style='color:#888;margin:0 0 24px'>%3</p>"
-        "%4"
-        "%5"
-        "%6"
-        "<a href='/upload/%7?lang=%8' style='display:inline-block;margin-top:20px;padding:10px 28px;"
-        "background:#4caf50;color:#fff;text-decoration:none;border-radius:8px;font-size:14px'>'+t('lan_upload_file')+'</a>"
-        "<p style='color:#444;font-size:12px;margin-top:30px'>'+t('lan_powered_by')+'</p>"
-        "</div></div>"
-        "<script>"
-        "var i18n=%9;"
-        "function t(k){return i18n[k]||k};"
-        "var dlChunks=[];var dlFileSize=0;var dlUrl='';var dlCancelled=false;var dlController=null;"
-        "function formatSize(b){if(b<1024)return b+' B';if(b<1048576)return(b/1024).toFixed(1)+' KB';return(b/1048576).toFixed(1)+' MB';}"
-        "function updateProgress(downloaded,total){"
-        "var pct=total>0?Math.round(downloaded/total*100):0;"
-        "document.getElementById('dl-bar').style.width=pct+'%%';"
-        "document.getElementById('dl-percent').textContent=pct+'%%';"
-        "document.getElementById('dl-size').textContent=formatSize(downloaded)+' / '+formatSize(total);}"
-        "function updateSpeed(bytesPerSec){"
-        "document.getElementById('dl-speed').textContent=bytesPerSec>0?formatSize(bytesPerSec)+'/s':'';}"
-        "async function startDownload(url){"
-        "dlUrl=url;dlCancelled=false;"
-        "document.getElementById('dl-progress').style.display='block';"
-        "document.getElementById('dl-cancel-btn').style.display='inline-block';"
-        "document.getElementById('dl-status').textContent=t('lan_fetching_info');"
-        "try{"
-        "var headResp=await fetch(url,{method:'HEAD'});"
-        "if(!headResp.ok){document.getElementById('dl-status').textContent=t('lan_fetch_failed');return;}"
-        "dlFileSize=parseInt(headResp.headers.get('Content-Length'))||0;"
-        "var acceptRanges=headResp.headers.get('Accept-Ranges');"
-        "if(acceptRanges!=='bytes'){document.getElementById('dl-status').textContent=t('lan_no_resume');window.location.href=url;return;}"
-        "if(dlFileSize>524288000){document.getElementById('dl-status').textContent=t('lan_large_file')+'('+formatSize(dlFileSize)+'),'+t('lan_suggest_manager');}"
-        "else{document.getElementById('dl-status').textContent=t('lan_file_size')+formatSize(dlFileSize);}"
-        "await resumeDownload();"
-        "}catch(e){document.getElementById('dl-status').textContent=t('lan_error')+e.message;}}"
-        "async function resumeDownload(){"
-        "var downloaded=0;for(var i=0;i<dlChunks.length;i++){var buf=await dlChunks[i].arrayBuffer();downloaded+=buf.byteLength;}"
-        "if(downloaded>=dlFileSize&&dlFileSize>0){saveFile();return;}"
-        "dlController=new AbortController();"
-        "var headers={};if(downloaded>0){headers['Range']='bytes='+downloaded+'-';}"
-        "document.getElementById('dl-status').textContent=downloaded>0?t('lan_resuming')+formatSize(downloaded)+t('lan_downloaded'):t('lan_downloading');"
-        "updateProgress(downloaded,dlFileSize);"
-        "var lastTime=Date.now();var lastDownloaded=downloaded;"
-        "try{"
-        "var resp=await fetch(dlUrl,{headers:headers,signal:dlController.signal});"
-        "if(!resp.ok&&(resp.status!==206)){document.getElementById('dl-status').textContent=t('lan_dl_failed')+resp.status;return;}"
-        "var reader=resp.body.getReader();"
-        "while(true){"
-        "if(dlCancelled)break;"
-        "var result=await reader.read();"
-        "if(result.done)break;"
-        "dlChunks.push(result.value);"
-        "downloaded=0;for(var i=0;i<dlChunks.length;i++){downloaded+=dlChunks[i].byteLength;}"
-        "var now=Date.now();var dt=now-lastTime;"
-        "if(dt>=500){var speed=(downloaded-lastDownloaded)*1000/dt;updateSpeed(speed);lastTime=now;lastDownloaded=downloaded;}"
-        "updateProgress(downloaded,dlFileSize);}"
-        "if(!dlCancelled){"
-        "if(dlFileSize>0&&downloaded>=dlFileSize){saveFile();}"
-        "else if(dlFileSize<=0&&result.done){dlFileSize=downloaded;saveFile();}"
-        "else{document.getElementById('dl-status').textContent=t('lan_interrupted');}}"
-        "else{document.getElementById('dl-status').textContent=t('lan_cancelled_resume');}"
-        "}catch(e){"
-        "if(e.name==='AbortError'){document.getElementById('dl-status').textContent=t('lan_cancelled_resume');}"
-        "else{document.getElementById('dl-status').textContent=t('lan_interrupted_msg')+e.message;}}}"
-        "function saveFile(){"
-        "document.getElementById('dl-status').textContent=t('lan_saving');"
-        "var blob=new Blob(dlChunks);var url=URL.createObjectURL(blob);"
-        "var a=document.createElement('a');a.href=url;"
-        "var name=dlUrl.split('/').filter(function(s){return s.length>0}).pop()||'download';"
-        "a.download=decodeURIComponent(name);a.click();"
-        "setTimeout(function(){URL.revokeObjectURL(url);},10000);"
-        "document.getElementById('dl-status').textContent=t('lan_complete');"
-        "updateProgress(dlFileSize,dlFileSize);dlChunks=[];}"
-        "function cancelDownload(){dlCancelled=true;if(dlController)dlController.abort();}"
-        "</script></body></html>")
-        .arg(folderName)
-        .arg(isFolder ? "\xf0\x9f\x93\x82" : "\xf0\x9f\x93\x84")
-        .arg(isFolder ? (lang == "en" ? "Folder Share" : "文件夹分享") : (lang == "en" ? "File Share" : "文件分享"))
-        .arg(downloadBtn)
-        .arg(progressSection)
-        .arg(fileListSection)
-        .arg(token)
-        .arg(lang)
-        .arg(i18nDict)
-        .toUtf8();
-}
-
-QByteArray RequestHandler::generatePasswordPage(const QString& token, const QString& lang) const
-{
-    QString i18nDict = htmlI18nDict(lang);
-    QString langSuffix = (lang == "en") ? "&lang=en" : "";
-    return QString(
-        "<!DOCTYPE html><html><head><meta charset='utf-8'>"
-        "<meta name='viewport' content='width=device-width,initial-scale=1'>"
-        "<title>NetShare - '+t('lan_pwd_title')+'</title></head>"
-        "<body style='font-family:system-ui,sans-serif;background:#0f0f23;color:#eee;"
-        "margin:0;padding:0;min-height:100vh;display:flex;align-items:center;justify-content:center'>"
-        "<div style='max-width:400px;width:100%;padding:20px'>"
-        "<div style='background:#16213e;border-radius:16px;padding:40px;text-align:center'>"
-        "<div style='font-size:48px;margin-bottom:16px'>🔒</div>"
-        "<h1 style='font-size:20px;margin:0 0 8px'>'+t('lan_pwd_required')+'</h1>"
-        "<p style='color:#888;margin:0 0 24px'>'+t('lan_enter_pwd')+'</p>"
-        "<form method='get' action='/s/%1%2' style='display:flex;gap:8px'>"
-        "<input type='password' name='pw' placeholder=\"'+t('lan_pwd_placeholder')+'\" "
-        "style='flex:1;padding:12px 16px;border:1px solid #2a2a3e;border-radius:8px;"
-        "background:#1a1a2e;color:#eee;font-size:14px;outline:none'>"
-        "<button type='submit' style='padding:12px 24px;background:#e94560;color:#fff;"
-        "border:none;border-radius:8px;font-size:14px;cursor:pointer'>'+t('lan_verify')+'</button>"
-        "</form></div></div>"
-        "<script>var i18n=%3;function t(k){return i18n[k]||k};</script>"
-        "</body></html>")
-        .arg(token).arg(langSuffix).arg(i18nDict).toUtf8();
-}
-
-QByteArray RequestHandler::generateErrorPage(const QString& lang) const
-{
-    QString i18nDict = htmlI18nDict(lang);
-    QString langAttr = (lang == "en") ? "en" : "zh";
-    return QString(
-        "<!DOCTYPE html><html lang='%1'><head><meta charset='utf-8'>"
-        "<meta name='viewport' content='width=device-width,initial-scale=1'>"
-        "<title>NetShare - '+t('lan_error_share_not_exist')+'</title></head>"
-        "<body style='font-family:system-ui,sans-serif;background:#0f0f23;color:#eee;"
-        "margin:0;padding:0;min-height:100vh;display:flex;align-items:center;justify-content:center'>"
-        "<div style='max-width:400px;width:100%;padding:20px'>"
-        "<div style='background:#16213e;border-radius:16px;padding:40px;text-align:center'>"
-        "<div style='font-size:48px;margin-bottom:16px'>😕</div>"
-        "<h1 style='font-size:20px;margin:0 0 8px'>'+t('lan_error_share_not_exist')+'</h1>"
-        "<p style='color:#888;margin:0 0 24px'>'+t('lan_error_share_invalid')+'</p>"
-        "</div></div>"
-        "<script>var i18n=%2;function t(k){return i18n[k]||k;}</script>"
-        "</body></html>")
-        .arg(langAttr).arg(i18nDict).toUtf8();
-}
-
-QByteArray RequestHandler::generateUploadPage(const QString& token, const QString& lang) const
-{
-    QString i18nDict = htmlI18nDict(lang);
-    QString langSuffix = (lang == "en") ? "?lang=en" : "";
-    return QString(
-        "<!DOCTYPE html><html><head><meta charset='utf-8'>"
-        "<meta name='viewport' content='width=device-width,initial-scale=1'>"
-        "<title>NetShare - '+t('lan_upload_title')+'</title></head>"
-        "<body style='font-family:system-ui,sans-serif;background:#0f0f23;color:#eee;"
-        "margin:0;padding:0;min-height:100vh;display:flex;align-items:center;justify-content:center'>"
-        "<div style='max-width:540px;width:100%;padding:20px'>"
-        "<div style='background:#16213e;border-radius:16px;padding:40px;text-align:center'>"
-        "<div style='font-size:48px;margin-bottom:16px'>📤</div>"
-        "<h1 style='font-size:24px;margin:0 0 8px'>'+t('lan_upload_title')+'</h1>"
-        "<p style='color:#888;margin:0 0 24px'>'+t('lan_upload_subtitle')+'</p>"
-        "<input type='file' multiple style='display:none' id='fileInput'>"
-        "<input type='file' multiple webkitdirectory directory mozdirectory style='display:none' id='folderInput'>"
-        "<div id='dropZone' style='border:2px dashed #2a2a3e;border-radius:12px;padding:40px;"
-        "cursor:pointer;transition:border-color 0.2s'>"
-        "<div style='font-size:48px;margin-bottom:12px'>📁</div>"
-        "<p style='color:#888;font-size:14px'>'+t('lan_drag_here')+'</p>"
-        "</div>"
-        "<div style='display:flex;gap:8px;margin-top:12px'>"
-        "<div id='selectFileBtn' "
-        "style='flex:1;padding:10px;background:#1a1a3e;color:#4caf50;border:1px solid #2a2a3e;"
-        "border-radius:8px;font-size:14px;cursor:pointer;text-align:center'>'+t('lan_select_file')+'</div>"
-        "<div id='selectFolderBtn' "
-        "style='flex:1;padding:10px;background:#1a1a3e;color:#2196f3;border:1px solid #2a2a3e;"
-        "border-radius:8px;font-size:14px;cursor:pointer;text-align:center'>'+t('lan_select_folder')+'</div>"
-        "</div>"
-        "<div id='fileList' style='margin:16px 0;max-height:240px;overflow-y:auto'></div>"
-        "<div id='progress' style='display:none;margin:16px 0'>"
-        "<div style='height:6px;background:#2a2a3e;border-radius:3px;overflow:hidden'>"
-        "<div id='progressBar' style='height:100%;background:#4caf50;width:0%;transition:width 0.3s'></div></div>"
-        "<div style='display:flex;justify-content:space-between;margin-top:8px'>"
-        "<span id='progressText' style='color:#888;font-size:12px'>0%</span>"
-        "<span id='statusText' style='color:#888;font-size:12px'>'+t('lan_uploading')+'</span></div></div>"
-        "<button type='button' id='uploadBtn' disabled style='width:100%;padding:14px;"
-        "background:#4caf50;color:#fff;border:none;border-radius:8px;font-size:16px;"
-        "font-weight:600;cursor:pointer'>'+t('lan_start_upload')+'</button>"
-        "<div id='result' style='display:none;margin-top:20px'>"
-        "<div style='font-size:48px;margin-bottom:12px'>✅</div>"
-        "<p style='color:#888;font-size:14px;margin-bottom:16px'>'+t('lan_upload_success')+'</p>"
-        "<a id='resultLink' href='#' style='color:#4caf50;word-break:break-all;font-size:13px'></a></div>"
-        "</div>"
-        "<script>"
-        "var i18n=%2;"
-        "function t(k){return i18n[k]||k};"
-        "(function(){"
-        "var token='%1';"
-        "var allFiles=[];"
-        "var fileInput=document.getElementById('fileInput');"
-        "var folderInput=document.getElementById('folderInput');"
-        "var dropZone=document.getElementById('dropZone');"
-        "var fileList=document.getElementById('fileList');"
-        "var uploadBtn=document.getElementById('uploadBtn');"
-        "var progress=document.getElementById('progress');"
-        "var progressBar=document.getElementById('progressBar');"
-        "var progressText=document.getElementById('progressText');"
-        "var statusText=document.getElementById('statusText');"
-        "var result=document.getElementById('result');"
-        "var resultLink=document.getElementById('resultLink');"
-        "function formatSize(s){if(s<1024)return s+'B';if(s<1048576)return(s/1024).toFixed(1)+'KB';return(s/1048576).toFixed(1)+'MB'}"
-        "function updateFileList(){"
-        "fileList.innerHTML=allFiles.map(function(f,i){"
-        "return '<div style=\"padding:6px 8px;background:#1a1a3e;border-radius:6px;margin:4px 0;"
-        "display:flex;justify-content:space-between;align-items:center;font-size:13px\">"
-        "<span style=\"overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1\">'+f.name+'</span>"
-        "<span style=\"color:#888;margin-left:8px\">'+formatSize(f.size)+'</span>"
-        "<span onclick=\"allFiles.splice('+i+',1);updateFileList()\" style=\"color:#e94560;cursor:pointer;margin-left:8px\">✕</span>"
-        "</div>';}).join('');"
-        "uploadBtn.disabled=allFiles.length===0;"
-        "if(allFiles.length>0){uploadBtn.textContent=t('lan_upload_files')+allFiles.length+t('lan_files_unit')+formatSize(allFiles.reduce(function(a,b){return a+b.size},0))+')'}"
-        "else{uploadBtn.textContent=t('lan_start_upload')}}"
-        "function addFiles(fileList){for(var i=0;i<fileList.length;i++){allFiles.push(fileList[i])}updateFileList()}"
-        "document.getElementById('selectFileBtn').onclick=function(){fileInput.click()};"
-        "document.getElementById('selectFolderBtn').onclick=function(){folderInput.click()};"
-        "fileInput.onchange=function(){addFiles(this.files);this.value=''};"
-        "folderInput.onchange=function(){addFiles(this.files);this.value=''};"
-        "dropZone.ondragover=function(e){e.preventDefault();this.style.borderColor='#4caf50'};"
-        "dropZone.ondragleave=function(){this.style.borderColor='#2a2a3e'};"
-        "dropZone.ondrop=function(e){e.preventDefault();this.style.borderColor='#2a2a3e';addFiles(e.dataTransfer.files)};"
-        "uploadBtn.onclick=function(){"
-        "if(allFiles.length===0)return;"
-        "uploadBtn.disabled=true;progress.style.display='block';result.style.display='none';"
-        "statusText.textContent=t('lan_prepare_upload');"
-        "var idx=0;var total=allFiles.length;"
-        "function uploadNext(){"
-        "if(idx>=total){"
-        "progressBar.style.width='100%';progressText.textContent='100%';statusText.textContent=t('lan_upload_complete');"
-        "result.style.display='block';resultLink.href='/s/'+token+'%3';resultLink.textContent=t('lan_view_share');"
-        "allFiles=[];updateFileList();uploadBtn.disabled=false;return"
-        "}"
-        "var file=allFiles[idx];statusText.textContent=t('lan_uploading_n')+(idx+1)+'/'+total+'): '+file.name;"
-        "var fd=new FormData();fd.append('file',file);fd.append('token',token);"
-        "var xhr=new XMLHttpRequest();"
-        "xhr.upload.onprogress=function(e){if(e.lengthComputable){"
-        "var pct=Math.round((idx+e.loaded/e.length)/total*100);"
-        "progressBar.style.width=pct+'%';progressText.textContent=pct+'%'}};"
-        "xhr.onload=function(){if(xhr.status===200){idx++;uploadNext()}"
-        "else{statusText.textContent=t('lan_upload_failed')+xhr.statusText;uploadBtn.disabled=false}};"
-        "xhr.onerror=function(){statusText.textContent=t('lan_network_error');uploadBtn.disabled=false};"
-        "xhr.open('POST','/upload/'+token,true);xhr.send(fd)"
-        "}"
-        "uploadNext()"
-        "}"
-        "})()"
-        "</script>"
-        "</div></div></body></html>")
-        .arg(token).arg(i18nDict).arg(langSuffix).toUtf8();
+    return html;
 }
 
 QString RequestHandler::mimeTypeForFile(const QString& fileName) const

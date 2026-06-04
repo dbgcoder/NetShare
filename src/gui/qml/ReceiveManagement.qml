@@ -137,7 +137,7 @@ Rectangle {
         background: Rectangle {
             color: Theme.surfaceColor
             radius: 8
-            border.color: Theme.sidebarColor
+            border.color: Theme.borderColor
         }
 
         ColumnLayout {
@@ -157,7 +157,7 @@ Rectangle {
             Rectangle {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 300
-                color: "#ffffff"
+                color: Theme.qrCodeBgColor
                 radius: 4
 
                 Image {
@@ -184,7 +184,7 @@ Rectangle {
                 text: qsTr("复制链接")
                 contentItem: Label {
                     text: parent.text
-                    color: "#ffffff"
+                    color: Theme.textOnAccentColor
                     horizontalAlignment: Text.AlignHCenter
                 }
                 background: Rectangle {
@@ -218,7 +218,7 @@ Rectangle {
         background: Rectangle {
             color: Theme.surfaceColor
             radius: 8
-            border.color: Theme.sidebarColor
+            border.color: Theme.borderColor
         }
 
         property string shareUrl: ""
@@ -240,7 +240,7 @@ Rectangle {
             Rectangle {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 300
-                color: "#ffffff"
+                color: Theme.qrCodeBgColor
                 radius: 4
 
                 Image {
@@ -267,7 +267,7 @@ Rectangle {
                 text: qsTr("复制链接")
                 contentItem: Label {
                     text: parent.text
-                    color: "#ffffff"
+                    color: Theme.textOnAccentColor
                     horizontalAlignment: Text.AlignHCenter
                 }
                 background: Rectangle {
@@ -364,7 +364,7 @@ Rectangle {
                         Label {
                             id: receiveQrLabel
                             text: qsTr("接收二维码")
-                            color: receiveQrMouse.containsMouse ? "#ffffff" : Theme.accentColor
+                            color: receiveQrMouse.containsMouse ? Theme.textOnAccentColor : Theme.accentColor
                             font.pixelSize: 12
                         }
                     }
@@ -382,7 +382,7 @@ Rectangle {
                     Layout.preferredHeight: 28
                     Layout.preferredWidth: pathLabel.width + 20
                     radius: 4
-                    color: pathMouse.containsMouse ? "#3e3e42" : "transparent"
+                    color: pathMouse.containsMouse ? Theme.hoverColor : "transparent"
                     border.color: Theme.borderColor
                     border.width: 1
 
@@ -436,7 +436,7 @@ Rectangle {
                             id: filterLabel
                             anchors.centerIn: parent
                             text: modelData
-                            color: root.filterIndex === index ? "#ffffff" : Theme.textColor
+                            color: root.filterIndex === index ? Theme.textOnAccentColor : Theme.textColor
                             font.pixelSize: 12
                         }
 
@@ -456,6 +456,9 @@ Rectangle {
                     Layout.preferredHeight: 28
                     placeholderText: qsTr("搜索文件...")
                     color: Theme.textColor
+                    placeholderTextColor: Theme.textSecondary
+                    selectionColor: Theme.accentColor
+                    selectedTextColor: Theme.textOnAccentColor
                     font.pixelSize: 12
 
                     background: Rectangle {
@@ -531,7 +534,7 @@ Rectangle {
 
                         Rectangle {
                             width: 32; height: 32; radius: 4
-                            color: folderMouse.containsMouse ? "#3e3e42" : "transparent"
+                            color: folderMouse.containsMouse ? Theme.hoverColor : "transparent"
                             ToolTip.visible: folderMouse.containsMouse
                             ToolTip.text: qsTr("打开文件夹")
                             Label { anchors.centerIn: parent; text: "📁"; font.pixelSize: 14 }
@@ -544,7 +547,7 @@ Rectangle {
 
                         Rectangle {
                             width: 32; height: 32; radius: 4
-                            color: qrMouse.containsMouse ? "#3e3e42" : "transparent"
+                            color: qrMouse.containsMouse ? Theme.hoverColor : "transparent"
                             ToolTip.visible: qrMouse.containsMouse
                             ToolTip.text: qsTr("分享二维码")
                             Label { anchors.centerIn: parent; text: "📱"; font.pixelSize: 14 }
@@ -566,7 +569,7 @@ Rectangle {
                                 font.pixelSize: 16
                             }
                             background: Rectangle {
-                                color: parent.hovered ? "#3e3e42" : "transparent"
+                                color: parent.hovered ? Theme.hoverColor : "transparent"
                                 radius: 4
                             }
                             ToolTip.text: qsTr("删除")

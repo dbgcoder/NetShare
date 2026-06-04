@@ -18,6 +18,7 @@
 #include <QTimer>
 #include <QDebug>
 #include <QTranslator>
+#include <QLibraryInfo>
 #include <QLocale>
 #include <QFile>
 #include <QFileInfo>
@@ -236,10 +237,13 @@ private:
         int langIndex = m_settings->value("General/Language", 0).toInt();
 
         QString qmName;
+        QString qtLocale;
         if (langIndex == 1) {
             qmName = QStringLiteral("netshare_en");
+            qtLocale = QStringLiteral("en");
         } else {
             qmName = QStringLiteral("netshare_zh_CN");
+            qtLocale = QStringLiteral("zh_CN");
         }
 
         m_translator = new QTranslator(this);
@@ -247,24 +251,35 @@ private:
         if (m_translator->load(qrcPath)) {
             QCoreApplication::installTranslator(m_translator);
             LOG_INFO("Translator loaded from QRC: %s", qPrintable(qrcPath));
-            return;
-        }
-
-        QString qmDir;
+        } else {
+            QString qmDir;
 #ifdef Q_OS_WIN
-        qmDir = QCoreApplication::applicationDirPath() + "/i18n";
+            qmDir = QCoreApplication::applicationDirPath() + "/i18n";
 #else
-        qmDir = QCoreApplication::applicationDirPath() + "/../share/netshare/i18n";
+            qmDir = QCoreApplication::applicationDirPath() + "/../share/netshare/i18n";
 #endif
-        if (m_translator->load(qmName, qmDir)) {
-            QCoreApplication::installTranslator(m_translator);
-            LOG_INFO("Translator loaded from file: %s/%s.qm", qPrintable(qmDir), qPrintable(qmName));
-            return;
+            if (m_translator->load(qmName, qmDir)) {
+                QCoreApplication::installTranslator(m_translator);
+                LOG_INFO("Translator loaded from file: %s/%s.qm", qPrintable(qmDir), qPrintable(qmName));
+            } else {
+                LOG_WARN("Failed to load translator: %s", qPrintable(qmName));
+                delete m_translator;
+                m_translator = nullptr;
+            }
         }
 
-        LOG_WARN("Failed to load translator: %s", qPrintable(qmName));
-        delete m_translator;
-        m_translator = nullptr;
+        // Load Qt base translations (provides standard dialog button texts like OK/Cancel)
+        m_qtTranslator = new QTranslator(this);
+        QString qtQmName = QStringLiteral("qtbase_%1").arg(qtLocale);
+        QString qtTransDir = QLibraryInfo::path(QLibraryInfo::TranslationsPath);
+        if (m_qtTranslator->load(qtQmName, qtTransDir)) {
+            QCoreApplication::installTranslator(m_qtTranslator);
+            LOG_INFO("Qt base translator loaded: %s/%s", qPrintable(qtTransDir), qPrintable(qtQmName));
+        } else {
+            LOG_WARN("Failed to load Qt base translator: %s/%s", qPrintable(qtTransDir), qPrintable(qtQmName));
+            delete m_qtTranslator;
+            m_qtTranslator = nullptr;
+        }
     }
 
     bool initializeCoreServices()
@@ -572,10 +587,10 @@ private:
         DwmExtendFrameIntoClientArea(hwnd, &margins);
 #endif
 
-        // Show window unless user configured start minimized
+        // Start hidden to tray when MinimizeToTray is enabled
         auto* settingsSvc = m_settings;
-        bool startMinimized = settingsSvc ? settingsSvc->value("General/MinimizeToTray", true).toBool() : false;
-        if (!startMinimized) {
+        bool minimizeToTray = settingsSvc ? settingsSvc->value("General/MinimizeToTray", true).toBool() : true;
+        if (!minimizeToTray) {
             m_mainWindow->show();
         }
 
@@ -616,9 +631,12 @@ private:
 
     QIcon createTrayIcon() const
     {
-        QIcon icon = QIcon::fromTheme("network-server");
+        QIcon icon(QStringLiteral(":/icons/netshare.png"));
         if (icon.isNull()) {
-            icon = QApplication::style()->standardIcon(QStyle::SP_DriveNetIcon);
+            icon = QIcon::fromTheme("network-server");
+            if (icon.isNull()) {
+                icon = QApplication::style()->standardIcon(QStyle::SP_DriveNetIcon);
+            }
         }
         return icon;
     }
@@ -762,6 +780,7 @@ private:
     QSystemTrayIcon*      m_trayIcon         = nullptr;
     QQmlApplicationEngine* m_engine          = nullptr;
     QTranslator*          m_translator       = nullptr;
+    QTranslator*          m_qtTranslator     = nullptr;
     QWindow*              m_mainWindow       = nullptr;
 
     void buildInjector()
@@ -797,6 +816,9 @@ int main(int argc, char *argv[])
     setupApplicationInfo();
 
     app.setQuitOnLastWindowClosed(false);
+
+    // Set application window icon
+    app.setWindowIcon(QIcon(QStringLiteral(":/icons/netshare.png")));
 
     NetShareApplication netshare;
     if (!netshare.initialize()) {

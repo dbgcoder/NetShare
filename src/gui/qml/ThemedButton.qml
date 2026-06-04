@@ -9,7 +9,7 @@ Button {
 
     contentItem: Label {
         text: root.text
-        color: root.primary ? "#ffffff" : Theme.textColor
+        color: root.primary ? Theme.textOnAccentColor : Theme.textColor
         font.pixelSize: 13
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
@@ -17,8 +17,8 @@ Button {
 
     background: Rectangle {
         color: {
-            if (root.primary) return root.pressed ? "#005a9e" : Theme.accentColor
-            if (root.hovered) return "#3e3e42"
+            if (root.primary) return root.pressed ? Theme.accentPressedColor : Theme.accentColor
+            if (root.hovered) return Theme.hoverColor
             return Theme.surfaceColor
         }
         radius: 4

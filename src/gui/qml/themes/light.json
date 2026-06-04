@@ -1,0 +1,39 @@
+{
+    "name": "Light",
+    "id": "light",
+    "colors": {
+        "backgroundColor": "#f5f5f5",
+        "surfaceColor": "#ffffff",
+        "sidebarColor": "#e8e8e8",
+        "accentColor": "#0078d4",
+        "textColor": "#1a1a1a",
+        "textSecondary": "#666666",
+        "borderColor": "#d0d0d0",
+        "successColor": "#107c10",
+        "warningColor": "#d48c00",
+        "errorColor": "#d13438",
+        "textOnAccentColor": "#ffffff",
+        "hoverColor": "#e5e5e5",
+        "itemHoverColor": "#ebebeb",
+        "alternateRowColor": "#f0f0f0",
+        "switchTrackColor": "#b0b0b0",
+        "accentPressedColor": "#005a9e",
+        "closeHoverColor": "#e81123",
+        "warningBgColor": "#fff4ce",
+        "successBgColor": "#dff6dd",
+        "switchThumbColor": "#ffffff",
+        "qrCodeBgColor": "#ffffff",
+        "textOnAccentSecondaryColor": "#c0d8ec",
+        "overlayColor": "#80000000"
+    },
+    "fontSizes": {
+        "large": 24,
+        "medium": 16,
+        "small": 12
+    },
+    "metrics": {
+        "spacing": 8,
+        "padding": 16,
+        "radius": 4
+    }
+}

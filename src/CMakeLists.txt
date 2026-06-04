@@ -4,7 +4,7 @@ add_subdirectory(network)
 add_subdirectory(qrcode)
 add_subdirectory(gui)
 
-set(APP_SOURCES main.cpp)
+set(APP_SOURCES main.cpp resources.qrc)
 
 qt_add_executable(NetShare ${APP_SOURCES})
 
@@ -39,6 +39,9 @@ target_link_libraries(NetShare PRIVATE
 )
 
 if(WIN32)
-    set_target_properties(NetShare PROPERTIES WIN32_EXECUTABLE TRUE)
+    set_target_properties(NetShare PROPERTIES
+        WIN32_EXECUTABLE TRUE
+        RC_FILE "${CMAKE_CURRENT_SOURCE_DIR}/gui/netshare.rc"
+    )
     target_link_libraries(NetShare PRIVATE dwmapi)
 endif()

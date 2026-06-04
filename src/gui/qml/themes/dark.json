@@ -1,0 +1,39 @@
+{
+    "name": "Dark",
+    "id": "dark",
+    "colors": {
+        "backgroundColor": "#202020",
+        "surfaceColor": "#2d2d30",
+        "sidebarColor": "#2b2b2d",
+        "accentColor": "#007acc",
+        "textColor": "#ffffff",
+        "textSecondary": "#cccccc",
+        "borderColor": "#3e3e42",
+        "successColor": "#4caf50",
+        "warningColor": "#ff9800",
+        "errorColor": "#f44336",
+        "textOnAccentColor": "#ffffff",
+        "hoverColor": "#3e3e42",
+        "itemHoverColor": "#333336",
+        "alternateRowColor": "#252528",
+        "switchTrackColor": "#555555",
+        "accentPressedColor": "#005a9e",
+        "closeHoverColor": "#e81123",
+        "warningBgColor": "#3e2a1a",
+        "successBgColor": "#1a3e2a",
+        "switchThumbColor": "#ffffff",
+        "qrCodeBgColor": "#ffffff",
+        "textOnAccentSecondaryColor": "#cccccc",
+        "overlayColor": "#80000000"
+    },
+    "fontSizes": {
+        "large": 24,
+        "medium": 16,
+        "small": 12
+    },
+    "metrics": {
+        "spacing": 8,
+        "padding": 16,
+        "radius": 4
+    }
+}

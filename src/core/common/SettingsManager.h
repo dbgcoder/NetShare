@@ -34,6 +34,9 @@ public:
     Q_INVOKABLE QString getUploadPath() const;
     Q_INVOKABLE void setUploadPath(const QString& path);
 
+    Q_INVOKABLE bool isAutoStartEnabled() const;
+    Q_INVOKABLE void setAutoStartEnabled(bool enabled);
+
 private:
     QSettings* m_settings;
 };

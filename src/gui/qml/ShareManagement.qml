@@ -119,7 +119,7 @@ Rectangle {
                 text: qsTr("New Share")
                 contentItem: Label {
                     text: parent.text
-                    color: "#ffffff"
+                    color: Theme.textOnAccentColor
                     horizontalAlignment: Text.AlignHCenter
                 }
                 background: Rectangle {
@@ -146,7 +146,7 @@ Rectangle {
                     Label {
                         anchors.centerIn: parent
                         text: modelData
-                        color: isSelected ? "#ffffff" : Theme.textColor
+                        color: isSelected ? Theme.textOnAccentColor : Theme.textColor
                         font.pixelSize: 13
                     }
 
@@ -185,11 +185,14 @@ Rectangle {
                 }
 
                 ScrollBar.vertical: ScrollBar {
-                    parent: shareListView.parent
-                    anchors.top: parent.top
-                    anchors.bottom: parent.bottom
-                    anchors.right: parent.right
-                    anchors.rightMargin: -8
+                    id: shareListScrollBar
+                    contentItem: Rectangle {
+                        implicitWidth: 6
+                        implicitHeight: 100
+                        radius: 3
+                        color: shareListScrollBar.active ? Theme.accentColor : Theme.borderColor
+                        opacity: shareListScrollBar.active ? 1.0 : 0.5
+                    }
                 }
 
                 Label {
@@ -211,7 +214,7 @@ Rectangle {
         Rectangle {
             width: parent ? parent.width - 16 : 0
             height: 80
-            color: mouseArea.containsMouse ? "#333336" : Theme.sidebarColor
+            color: mouseArea.containsMouse ? Theme.itemHoverColor : Theme.sidebarColor
             radius: 4
 
             MouseArea {
@@ -302,7 +305,7 @@ Rectangle {
                                 font.pixelSize: 16
                             }
                             background: Rectangle {
-                                color: parent.hovered ? "#3e3e42" : "transparent"
+                                color: parent.hovered ? Theme.hoverColor : "transparent"
                                 radius: 4
                             }
                             ToolTip.text: qsTr("Copy Link")
@@ -319,7 +322,7 @@ Rectangle {
                                 font.pixelSize: 16
                             }
                             background: Rectangle {
-                                color: parent.hovered ? "#3e3e42" : "transparent"
+                                color: parent.hovered ? Theme.hoverColor : "transparent"
                                 radius: 4
                             }
                             ToolTip.text: qsTr("QR Code")
@@ -340,7 +343,7 @@ Rectangle {
                                 font.pixelSize: 16
                             }
                             background: Rectangle {
-                                color: parent.hovered ? "#3e3e42" : "transparent"
+                                color: parent.hovered ? Theme.hoverColor : "transparent"
                                 radius: 4
                             }
                             ToolTip.text: qsTr("Cancel Share")
@@ -384,7 +387,7 @@ Rectangle {
         background: Rectangle {
             color: Theme.surfaceColor
             radius: 8
-            border.color: Theme.sidebarColor
+            border.color: Theme.borderColor
         }
 
         contentItem: Item {
@@ -443,7 +446,7 @@ Rectangle {
                             Label {
                                 anchors.centerIn: parent
                                 text: detailDialog.status
-                                color: "#ffffff"
+                                color: Theme.textOnAccentColor
                                 font.pixelSize: 11
                             }
                         }
@@ -573,7 +576,7 @@ Rectangle {
                                 font.pixelSize: 14
                             }
                             background: Rectangle {
-                                color: parent.hovered ? "#3e3e42" : "transparent"
+                                color: parent.hovered ? Theme.hoverColor : "transparent"
                                 radius: 4
                             }
                             ToolTip.text: qsTr("Copy Link")
@@ -590,7 +593,7 @@ Rectangle {
                                 font.pixelSize: 14
                             }
                             background: Rectangle {
-                                color: parent.hovered ? "#3e3e42" : "transparent"
+                                color: parent.hovered ? Theme.hoverColor : "transparent"
                                 radius: 4
                             }
                             ToolTip.text: qsTr("QR Code")
@@ -621,7 +624,7 @@ Rectangle {
         background: Rectangle {
             color: Theme.surfaceColor
             radius: 8
-            border.color: Theme.sidebarColor
+            border.color: Theme.borderColor
         }
 
         contentItem: ColumnLayout {
@@ -665,6 +668,9 @@ Rectangle {
                         placeholderText: qsTr("Please select file or folder")
                         readOnly: true
                         color: Theme.textColor
+                        placeholderTextColor: Theme.textSecondary
+                        selectionColor: Theme.accentColor
+                        selectedTextColor: Theme.textOnAccentColor
                         background: Rectangle {
                             color: Theme.backgroundColor
                             radius: 4
@@ -705,6 +711,9 @@ Rectangle {
                         placeholderText: qsTr("Leave empty for no password")
                         echoMode: TextInput.Password
                         color: Theme.textColor
+                        placeholderTextColor: Theme.textSecondary
+                        selectionColor: Theme.accentColor
+                        selectedTextColor: Theme.textOnAccentColor
                         background: Rectangle {
                             color: Theme.backgroundColor
                             radius: 4
@@ -797,7 +806,7 @@ Rectangle {
         background: Rectangle {
             color: Theme.surfaceColor
             radius: 8
-            border.color: Theme.sidebarColor
+            border.color: Theme.borderColor
         }
 
         ColumnLayout {
@@ -817,7 +826,7 @@ Rectangle {
             Rectangle {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 300
-                color: "#ffffff"
+                color: Theme.qrCodeBgColor
                 radius: 4
 
                 Image {
@@ -844,7 +853,7 @@ Rectangle {
                 text: qsTr("Copy Link")
                 contentItem: Label {
                     text: parent.text
-                    color: "#ffffff"
+                    color: Theme.textOnAccentColor
                     horizontalAlignment: Text.AlignHCenter
                 }
                 background: Rectangle {
@@ -860,14 +869,14 @@ Rectangle {
 
     Rectangle {
         id: copyToast
-        anchors.bottom: parent.bottom
-        anchors.bottomMargin: 20
-        anchors.horizontalCenter: parent.horizontalCenter
+        x: (parent.width - width) / 2
+        y: parent.height - height - 20
         width: 160
         height: 36
-        color: "#80000000"
+        color: Theme.overlayColor
         radius: 18
         visible: false
+        z: 100
 
         function show() {
             opacity = 1
@@ -878,7 +887,7 @@ Rectangle {
         Label {
             anchors.centerIn: parent
             text: qsTr("✓ Copied to clipboard")
-            color: "#ffffff"
+            color: Theme.textOnAccentColor
             font.pixelSize: 13
         }
 

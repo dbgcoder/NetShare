@@ -58,6 +58,8 @@ public:
     Q_INVOKABLE void sendMessage(const QString& toAddress, int toPort, const QString& content);
     Q_INVOKABLE void clearUnread(const QString& userAddress);
     Q_INVOKABLE QVariantList getUserList() const;
+    Q_INVOKABLE void renameDevice(const QString& address, const QString& name);
+    Q_INVOKABLE QString getDeviceName(const QString& address) const;
 
     void onMessageReceived(const QString& fromUser, const QString& fromIp,
                            const QString& content, const QString& timestamp,
@@ -77,6 +79,7 @@ private slots:
 
 private:
     void loadLocalDeviceInfo();
+    void loadDeviceNameMap();
     void appendMessage(const QString& address, const ChatMessage& msg);
     void updateAnonymousUser(const QString& remoteAddress, const QString& fromName, const QString& deviceType);
     void cleanupStaleAnonymousUsers();
@@ -94,6 +97,7 @@ private:
     QMap<QString, ChatUser> m_discoveredUsers;
     QMap<QString, ChatUser> m_anonymousUsers;
     QMap<QString, QList<ChatMessage>> m_chatHistory;
+    QMap<QString, QString> m_deviceNameMap;
 
     QTimer* m_cleanupTimer;
 };

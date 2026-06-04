@@ -24,6 +24,7 @@ ChatService::ChatService(mDNSService* mdnsService,
     , m_cleanupTimer(new QTimer(this))
 {
     loadLocalDeviceInfo();
+    loadDeviceNameMap();
 
     if (m_mdnsService) {
         connect(m_mdnsService, &mDNSService::serviceDiscovered,
@@ -95,7 +96,11 @@ QVariantList ChatService::getUserList() const
     for (auto it = m_discoveredUsers.constBegin(); it != m_discoveredUsers.constEnd(); ++it) {
         const ChatUser& user = it.value();
         QVariantMap entry;
-        entry[QStringLiteral("name")] = user.name;
+        QString displayName = user.name;
+        if (m_deviceNameMap.contains(user.address)) {
+            displayName = m_deviceNameMap.value(user.address);
+        }
+        entry[QStringLiteral("name")] = displayName;
         entry[QStringLiteral("address")] = user.address;
         entry[QStringLiteral("port")] = user.port;
         entry[QStringLiteral("isOnline")] = user.isOnline;
@@ -115,7 +120,11 @@ QVariantList ChatService::getUserList() const
     for (auto it = m_anonymousUsers.constBegin(); it != m_anonymousUsers.constEnd(); ++it) {
         const ChatUser& user = it.value();
         QVariantMap entry;
-        entry[QStringLiteral("name")] = user.name;
+        QString displayName = user.name;
+        if (m_deviceNameMap.contains(user.address)) {
+            displayName = m_deviceNameMap.value(user.address);
+        }
+        entry[QStringLiteral("name")] = displayName;
         entry[QStringLiteral("address")] = user.address;
         entry[QStringLiteral("port")] = user.port;
         entry[QStringLiteral("isOnline")] = user.isOnline;
@@ -425,4 +434,68 @@ QString ChatService::extractPureIp(const QString& remoteAddress) const
         }
     }
     return remoteAddress;
+}
+
+void ChatService::loadDeviceNameMap()
+{
+    if (!m_settingsManager) return;
+
+    m_deviceNameMap.clear();
+    QStringList keys = m_settingsManager->keys();
+    const QString prefix = QStringLiteral("Devices/");
+    for (const QString& key : keys) {
+        if (key.startsWith(prefix)) {
+            QString ip = key.mid(prefix.length());
+            QString name = m_settingsManager->getString(key);
+            if (!ip.isEmpty() && !name.isEmpty()) {
+                m_deviceNameMap[ip] = name;
+            }
+        }
+    }
+}
+
+void ChatService::renameDevice(const QString& address, const QString& name)
+{
+    if (address.isEmpty() || name.isEmpty()) return;
+
+    QString trimmedName = name.trimmed();
+    if (trimmedName.isEmpty()) return;
+
+    m_deviceNameMap[address] = trimmedName;
+
+    if (m_settingsManager) {
+        m_settingsManager->setValue(QStringLiteral("Devices/") + address, trimmedName);
+        m_settingsManager->sync();
+    }
+
+    auto dit = m_discoveredUsers.find(address);
+    if (dit != m_discoveredUsers.end()) {
+        dit.value().name = trimmedName;
+    }
+    auto ait = m_anonymousUsers.find(address);
+    if (ait != m_anonymousUsers.end()) {
+        ait.value().name = trimmedName;
+    }
+
+    emit userListChanged();
+    LOG_INFO("Device renamed: %s -> %s", qPrintable(address), qPrintable(trimmedName));
+}
+
+QString ChatService::getDeviceName(const QString& address) const
+{
+    if (m_deviceNameMap.contains(address)) {
+        return m_deviceNameMap.value(address);
+    }
+
+    auto dit = m_discoveredUsers.constFind(address);
+    if (dit != m_discoveredUsers.constEnd()) {
+        return dit.value().name;
+    }
+
+    auto ait = m_anonymousUsers.constFind(address);
+    if (ait != m_anonymousUsers.constEnd()) {
+        return ait.value().name;
+    }
+
+    return QString();
 }

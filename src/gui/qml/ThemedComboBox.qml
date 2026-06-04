@@ -61,7 +61,7 @@ ComboBox {
         width: root.width
         contentItem: Label {
             text: modelData
-            color: highlighted ? "#ffffff" : Theme.textColor
+            color: highlighted ? Theme.textOnAccentColor : Theme.textColor
             font.pixelSize: 13
             verticalAlignment: Text.AlignVCenter
         }

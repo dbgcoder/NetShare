@@ -8,6 +8,7 @@
 #include <QSet>
 #include <QTimer>
 #include <QVariantMap>
+#include <QVariantList>
 #include <QJsonObject>
 #include <functional>
 #include "civetweb.h"
@@ -60,6 +61,7 @@ public:
     void unsubscribeClient(mg_connection* conn, const QString& token);
     void unsubscribeClientFromAll(mg_connection* conn);
     int connectedClientCount() const;
+    Q_INVOKABLE QVariantList getConnectedClientsList() const;
 
     void setSslCertificate(const QString& certPath, const QString& keyPath);
     void setTlsEnabled(bool enabled);

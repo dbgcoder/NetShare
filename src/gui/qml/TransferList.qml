@@ -203,6 +203,52 @@ Rectangle {
         return (bytes / 1024 / 1024 / 1024).toFixed(1) + " GB"
     }
 
+    function formatDuration(secs) {
+        if (secs < 0 || !isFinite(secs)) return "--"
+        var h = Math.floor(secs / 3600)
+        var m = Math.floor((secs % 3600) / 60)
+        var s = Math.floor(secs % 60)
+        if (h > 0) return h + ":" + (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s
+        return m + ":" + (s < 10 ? "0" : "") + s
+    }
+
+    function formatTimeAgo(dateTimeStr) {
+        if (!dateTimeStr || dateTimeStr.length === 0) return ""
+        var dt = new Date(dateTimeStr)
+        if (isNaN(dt.getTime())) return ""
+        var now = new Date()
+        var diffMs = now.getTime() - dt.getTime()
+        var diffSec = Math.floor(diffMs / 1000)
+        if (diffSec < 60) return qsTr("just now")
+        var diffMin = Math.floor(diffSec / 60)
+        if (diffMin < 60) return qsTr("%1m ago").arg(diffMin)
+        var diffHour = Math.floor(diffMin / 60)
+        if (diffHour < 24) return qsTr("%1h ago").arg(diffHour)
+        return Qt.formatDateTime(dt, "MM-dd HH:mm")
+    }
+
+    function formatDateTimeShort(dateTimeStr) {
+        if (!dateTimeStr || dateTimeStr.length === 0) return ""
+        var dt = new Date(dateTimeStr)
+        if (isNaN(dt.getTime())) return ""
+        return Qt.formatDateTime(dt, "HH:mm:ss")
+    }
+
+    function getElapsedSecs(startedAtStr) {
+        if (!startedAtStr || startedAtStr.length === 0) return -1
+        var dt = new Date(startedAtStr)
+        if (isNaN(dt.getTime())) return -1
+        return (Date.now() - dt.getTime()) / 1000
+    }
+
+    function getEtaSecs(progress, speed, startedAtStr) {
+        if (progress >= 100 || speed <= 0) return -1
+        var elapsed = getElapsedSecs(startedAtStr)
+        if (elapsed <= 0) return -1
+        var remaining = (100 - progress) / progress * elapsed
+        return remaining
+    }
+
     Timer {
         id: refreshTimer
         interval: 1000
@@ -237,7 +283,7 @@ Rectangle {
                     horizontalAlignment: Text.AlignHCenter
                 }
                 background: Rectangle {
-                    color: parent.hovered ? "#3e3e42" : Theme.surfaceColor
+                    color: parent.hovered ? Theme.hoverColor : Theme.surfaceColor
                     radius: 4
                     border.color: Theme.borderColor
                 }
@@ -260,7 +306,7 @@ Rectangle {
                     horizontalAlignment: Text.AlignHCenter
                 }
                 background: Rectangle {
-                    color: parent.hovered ? "#3e3e42" : Theme.surfaceColor
+                    color: parent.hovered ? Theme.hoverColor : Theme.surfaceColor
                     radius: 4
                     border.color: Theme.borderColor
                 }
@@ -295,7 +341,7 @@ Rectangle {
                     Label {
                         anchors.centerIn: parent
                         text: modelData
-                        color: isSelected ? "#ffffff" : Theme.textColor
+                        color: isSelected ? Theme.textOnAccentColor : Theme.textColor
                         font.pixelSize: 13
                     }
 
@@ -334,11 +380,14 @@ Rectangle {
                 }
 
                 ScrollBar.vertical: ScrollBar {
-                    parent: taskListView.parent
-                    anchors.top: parent.top
-                    anchors.bottom: parent.bottom
-                    anchors.right: parent.right
-                    anchors.rightMargin: -8
+                    id: taskListScrollBar
+                    contentItem: Rectangle {
+                        implicitWidth: 6
+                        implicitHeight: 100
+                        radius: 3
+                        color: taskListScrollBar.active ? Theme.accentColor : Theme.borderColor
+                        opacity: taskListScrollBar.active ? 1.0 : 0.5
+                    }
                 }
 
                 Label {
@@ -360,7 +409,7 @@ Rectangle {
         Rectangle {
             width: parent ? parent.width - 16 : 0
             height: 88
-            color: taskMouseArea.containsMouse ? "#333336" : Theme.sidebarColor
+            color: taskMouseArea.containsMouse ? Theme.itemHoverColor : Theme.sidebarColor
             radius: 4
 
             MouseArea {
@@ -400,7 +449,7 @@ Rectangle {
                         Label {
                             anchors.centerIn: parent
                             text: model.statusText
-                            color: "#ffffff"
+                            color: Theme.textOnAccentColor
                             font.pixelSize: 10
                         }
                     }
@@ -418,7 +467,7 @@ Rectangle {
                                 font.pixelSize: 14
                             }
                             background: Rectangle {
-                                color: parent.hovered ? "#3e3e42" : "transparent"
+                                color: parent.hovered ? Theme.hoverColor : "transparent"
                                 radius: 4
                             }
                             ToolTip.text: qsTr("Pause")
@@ -436,7 +485,7 @@ Rectangle {
                                 font.pixelSize: 14
                             }
                             background: Rectangle {
-                                color: parent.hovered ? "#3e3e42" : "transparent"
+                                color: parent.hovered ? Theme.hoverColor : "transparent"
                                 radius: 4
                             }
                             ToolTip.text: qsTr("Resume")
@@ -454,7 +503,7 @@ Rectangle {
                                 font.pixelSize: 13
                             }
                             background: Rectangle {
-                                color: parent.hovered ? "#3e3e42" : "transparent"
+                                color: parent.hovered ? Theme.hoverColor : "transparent"
                                 radius: 4
                             }
                             ToolTip.text: qsTr("Delete")
@@ -502,7 +551,39 @@ Rectangle {
                         font.pixelSize: 11
                     }
 
+                    Label {
+                        text: {
+                            // Active tasks: show elapsed time
+                            if (model.status === 2 || model.status === 3 || model.status === 0 || model.status === 1) {
+                                var elapsed = getElapsedSecs(model.startedAt)
+                                if (elapsed >= 0) return qsTr("Elapsed: %1").arg(formatDuration(elapsed))
+                            }
+                            // Paused tasks: show elapsed time
+                            if (model.status === 4) {
+                                var elapsedP = getElapsedSecs(model.startedAt)
+                                if (elapsedP >= 0) return qsTr("Elapsed: %1").arg(formatDuration(elapsedP))
+                            }
+                            // Completed/Failed/Cancelled: show time ago
+                            return formatTimeAgo(model.startedAt)
+                        }
+                        color: Theme.textSecondary
+                        font.pixelSize: 11
+                    }
+
                     Item { Layout.fillWidth: true }
+
+                    Label {
+                        text: {
+                            // Active tasks: show ETA
+                            if (model.status === 2 || model.status === 3) {
+                                var eta = getEtaSecs(model.progress, model.speed, model.startedAt)
+                                if (eta > 0) return qsTr("ETA: %1").arg(formatDuration(eta))
+                            }
+                            return ""
+                        }
+                        color: Theme.textSecondary
+                        font.pixelSize: 11
+                    }
 
                     Label {
                         text: model.speedText

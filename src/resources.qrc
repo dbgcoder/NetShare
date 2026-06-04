@@ -1,0 +1,5 @@
+<RCC>
+    <qresource prefix="/icons">
+        <file alias="netshare.png">gui/icons/netshare.png</file>
+    </qresource>
+</RCC>
