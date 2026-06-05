@@ -76,9 +76,10 @@ Rectangle {
 
                 Repeater {
                     model: [
-                        { title: qsTr("General"), icon: "⚙️" },
-                        { title: qsTr("Network"), icon: "🌐" },
-                        { title: qsTr("Security"), icon: "🔒" }
+                        { title: qsTr("General"), icon: "\u2699\uFE0F" },
+                        { title: qsTr("Network"), icon: "\uD83C\uDF10" },
+                        { title: qsTr("Security"), icon: "\uD83D\uDD12" },
+                        { title: qsTr("About"), icon: "\u2139\uFE0F" }
                     ]
                     delegate: Rectangle {
                         Layout.fillWidth: true
@@ -595,6 +596,221 @@ Rectangle {
                         }
 
                         Item { Layout.fillWidth: true }
+                    }
+                }
+
+                // About Page
+                ColumnLayout {
+                    spacing: 24
+
+                    Label {
+                        text: qsTr("About NetShare")
+                        font.pixelSize: 20
+                        font.bold: true
+                        color: Theme.textColor
+                    }
+
+                    // App icon + name + version
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 16
+
+                        Image {
+                            source: "qrc:/icons/netshare.png"
+                            width: 64
+                            height: 64
+                            sourceSize.width: 64
+                            sourceSize.height: 64
+                            fillMode: Image.PreserveAspectFit
+                            smooth: true
+                        }
+
+                        ColumnLayout {
+                            spacing: 4
+
+                            Label {
+                                text: "NetShare"
+                                font.pixelSize: 22
+                                font.bold: true
+                                color: Theme.textColor
+                            }
+
+                            Label {
+                                text: qsTr("LAN File Sharing Tool")
+                                font.pixelSize: 13
+                                color: Theme.textSecondary
+                            }
+
+                            Label {
+                                text: "v1.0.0"
+                                font.pixelSize: 13
+                                color: Theme.textSecondary
+                                font.family: "Consolas"
+                            }
+                        }
+
+                        Item { Layout.fillWidth: true }
+                    }
+
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 1
+                        color: Theme.borderColor
+                    }
+
+                    // Info items
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 12
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 12
+
+                            Label {
+                                text: qsTr("Version")
+                                color: Theme.textSecondary
+                                font.pixelSize: 14
+                                Layout.preferredWidth: 100
+                            }
+
+                            Label {
+                                text: "1.0.0"
+                                color: Theme.textColor
+                                font.pixelSize: 14
+                                font.family: "Consolas"
+                            }
+
+                            Item { Layout.fillWidth: true }
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 12
+
+                            Label {
+                                text: qsTr("Build")
+                                color: Theme.textSecondary
+                                font.pixelSize: 14
+                                Layout.preferredWidth: 100
+                            }
+
+                            Label {
+                                text: Qt.platform.os === "windows" ? "Windows (MSVC 2022)" : Qt.platform.os === "osx" ? "macOS" : "Linux"
+                                color: Theme.textColor
+                                font.pixelSize: 14
+                            }
+
+                            Item { Layout.fillWidth: true }
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 12
+
+                            Label {
+                                text: qsTr("Qt Version")
+                                color: Theme.textSecondary
+                                font.pixelSize: 14
+                                Layout.preferredWidth: 100
+                            }
+
+                            Label {
+                                text: "6.8.3"
+                                color: Theme.textColor
+                                font.pixelSize: 14
+                                font.family: "Consolas"
+                            }
+
+                            Item { Layout.fillWidth: true }
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 12
+
+                            Label {
+                                text: qsTr("Contact")
+                                color: Theme.textSecondary
+                                font.pixelSize: 14
+                                Layout.preferredWidth: 100
+                            }
+
+                            Label {
+                                text: "HD5080@outlook.com"
+                                color: Theme.accentColor
+                                font.pixelSize: 14
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: Qt.openUrlExternally("mailto:HD5080@outlook.com")
+                                }
+                            }
+
+                            Item { Layout.fillWidth: true }
+                        }
+                    }
+
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 1
+                        color: Theme.borderColor
+                    }
+
+                    // Check for updates button
+                    Button {
+                        id: checkUpdateBtn
+                        text: qsTr("Check for Updates")
+                        Layout.preferredHeight: 40
+                        Layout.preferredWidth: 200
+                        enabled: !updateChecking
+
+                        property bool updateChecking: false
+
+                        contentItem: Label {
+                            text: parent.text
+                            color: parent.enabled ? (parent.down ? Theme.textOnAccentColor : Theme.accentColor) : Theme.textSecondary
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+
+                        background: Rectangle {
+                            color: parent.down ? Theme.accentColor : (parent.hovered ? Theme.hoverColor : Theme.surfaceColor)
+                            radius: 4
+                            border.color: Theme.accentColor
+                        }
+
+                        onClicked: {
+                            checkUpdateBtn.updateChecking = true
+                            updateStatusText.text = qsTr("Checking for updates...")
+                            updateTimer.start()
+                        }
+                    }
+
+                    Label {
+                        id: updateStatusText
+                        color: Theme.textSecondary
+                        font.pixelSize: 13
+                        visible: text !== ""
+                    }
+
+                    Timer {
+                        id: updateTimer
+                        interval: 1500
+                        onTriggered: {
+                            checkUpdateBtn.updateChecking = false
+                            updateStatusText.text = qsTr("You are using the latest version.")
+                        }
+                    }
+
+                    Item { Layout.fillHeight: true }
+
+                    // Copyright
+                    Label {
+                        text: "\u00A9 2025 NetShare. " + qsTr("All rights reserved.")
+                        color: Theme.textSecondary
+                        font.pixelSize: 11
+                        Layout.alignment: Qt.AlignHCenter
                     }
                 }
             }

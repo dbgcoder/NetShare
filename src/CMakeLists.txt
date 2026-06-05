@@ -4,7 +4,7 @@ add_subdirectory(network)
 add_subdirectory(qrcode)
 add_subdirectory(gui)
 
-set(APP_SOURCES main.cpp resources.qrc)
+set(APP_SOURCES main.cpp resources.qrc gui/netshare.rc)
 
 qt_add_executable(NetShare ${APP_SOURCES})
 

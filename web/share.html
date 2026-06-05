@@ -43,16 +43,16 @@
         }
         .btn-green:hover { background: #66bb6a; }
         .btn-secondary {
-            display: inline-block; padding: 14px 40px;
+            display: block; padding: 14px 40px;
             background: transparent; color: var(--accent-green); text-decoration: none;
             border: 1px solid var(--accent-green); border-radius: 8px; font-size: 16px; font-weight: 600;
-            cursor: pointer; transition: all 0.2s;
+            cursor: pointer; transition: all 0.2s; box-sizing: border-box;
         }
         .btn-secondary:hover { background: rgba(76, 175, 80, 0.1); }
         .btn-row {
             display: flex; gap: 12px; justify-content: center; margin-top: 20px;
         }
-        .btn-row .btn, .btn-row .btn-secondary { flex: 1; text-align: center; }
+        .btn-row .btn, .btn-row .btn-secondary { flex: 1; text-align: center; white-space: nowrap; }
         #downloadBtns { flex: 1; }
         #downloadBtns .btn { width: 100%; }
 
@@ -165,7 +165,7 @@ var shareIcon = document.getElementById('shareIcon');
 var shareName = document.getElementById('shareName');
 var shareSubtitle = document.getElementById('shareSubtitle');
 var uploadLink = document.getElementById('uploadLink');
-var langSuffix = LANG === 'en' ? '?lang=en' : '';
+
 
 if (IS_FOLDER) {
     shareIcon.textContent = '📂';
@@ -188,7 +188,7 @@ if (IS_FOLDER) {
 }
 
 // Upload link
-uploadLink.href = '/receive' + (LANG === 'en' ? '?lang=en' : '');
+uploadLink.href = '/receive';
 
 // File list for folders
 if (IS_FOLDER) {

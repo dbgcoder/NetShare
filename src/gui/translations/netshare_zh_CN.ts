@@ -547,6 +547,61 @@ Click &quot;Scan Devices&quot; to search LAN</source>
         <source>Light</source>
         <translation>亮色</translation>
     </message>
+    <message>
+        <location filename="../qml/SettingsPage.qml" line="82"/>
+        <source>About</source>
+        <translation>关于</translation>
+    </message>
+    <message>
+        <location filename="../qml/SettingsPage.qml" line="607"/>
+        <source>About NetShare</source>
+        <translation>关于 NetShare</translation>
+    </message>
+    <message>
+        <location filename="../qml/SettingsPage.qml" line="639"/>
+        <source>LAN File Sharing Tool</source>
+        <translation>局域网文件共享工具</translation>
+    </message>
+    <message>
+        <location filename="../qml/SettingsPage.qml" line="671"/>
+        <source>Version</source>
+        <translation>版本</translation>
+    </message>
+    <message>
+        <location filename="../qml/SettingsPage.qml" line="692"/>
+        <source>Build</source>
+        <translation>构建</translation>
+    </message>
+    <message>
+        <location filename="../qml/SettingsPage.qml" line="712"/>
+        <source>Qt Version</source>
+        <translation>Qt 版本</translation>
+    </message>
+    <message>
+        <location filename="../qml/SettingsPage.qml" line="733"/>
+        <source>Contact</source>
+        <translation>联系</translation>
+    </message>
+    <message>
+        <location filename="../qml/SettingsPage.qml" line="763"/>
+        <source>Check for Updates</source>
+        <translation>检查更新</translation>
+    </message>
+    <message>
+        <location filename="../qml/SettingsPage.qml" line="785"/>
+        <source>Checking for updates...</source>
+        <translation>正在检查更新...</translation>
+    </message>
+    <message>
+        <location filename="../qml/SettingsPage.qml" line="802"/>
+        <source>You are using the latest version.</source>
+        <translation>您正在使用最新版本。</translation>
+    </message>
+    <message>
+        <location filename="../qml/SettingsPage.qml" line="810"/>
+        <source>All rights reserved.</source>
+        <translation>保留所有权利。</translation>
+    </message>
 </context>
 <context>
     <name>ShareManagement</name>

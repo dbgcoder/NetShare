@@ -1766,9 +1766,8 @@ QList<UploadedFile> RequestHandler::parseMultipartFormData(const QByteArray& bod
 
 QString RequestHandler::langParam(const HttpRequestInfo& info) const
 {
-    auto qp = parseQueryString(info.queryString);
-    if (qp.value("lang") == "en") return "en";
-    // Use software language setting
+    Q_UNUSED(info)
+    // Always use software language setting, ignore URL/browser language
     if (m_settingsManager) {
         int langIndex = m_settingsManager->value("General/Language", 0).toInt();
         if (langIndex == 1) return "en";

@@ -252,23 +252,16 @@ function tf(key) {
 
 // ===== Apply i18n to DOM =====
 function applyI18n(callback) {
-    var params = new URLSearchParams(window.location.search);
-    var urlLang = params.get('lang');
-    if (urlLang && NetShareI18n[urlLang]) {
-        currentLang = urlLang;
+    // Always use software language setting, ignore browser/URL language
+    fetch('/api/language').then(function(r) { return r.json(); }).then(function(data) {
+        currentLang = (data.language && NetShareI18n[data.language]) ? data.language : 'zh';
         doApplyI18n();
         if (callback) callback();
-    } else {
-        fetch('/api/language').then(function(r) { return r.json(); }).then(function(data) {
-            currentLang = (data.language && NetShareI18n[data.language]) ? data.language : 'zh';
-            doApplyI18n();
-            if (callback) callback();
-        }).catch(function() {
-            currentLang = 'zh';
-            doApplyI18n();
-            if (callback) callback();
-        });
-    }
+    }).catch(function() {
+        currentLang = 'zh';
+        doApplyI18n();
+        if (callback) callback();
+    });
 }
 
 function doApplyI18n() {
