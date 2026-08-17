@@ -61,6 +61,7 @@ private:
     bool createTables();
     bool createSharesTable();
     bool createTransferLogsTable();
+    bool createUsersTable();
     bool createSettingsTable();
 
     QString m_databasePath;

@@ -39,7 +39,7 @@
         <location filename="../qml/DeviceDiscovery.qml" line="58"/>
         <location filename="../qml/DeviceDiscovery.qml" line="83"/>
         <source>Connected</source>
-        <translation type="unfinished"></translation>
+        <translation>已连接</translation>
     </message>
     <message>
         <location filename="../qml/DeviceDiscovery.qml" line="127"/>
@@ -112,52 +112,57 @@ Click &quot;Scan Devices&quot; to search LAN</source>
         <translation>NetShare - 局域网文件共享</translation>
     </message>
     <message>
-        <location filename="../qml/Main.qml" line="136"/>
+        <location filename="../qml/Main.qml" line="139"/>
         <source>拖放文件到发送列表</source>
-        <translation type="unfinished"></translation>
+        <translation>拖放文件到发送列表</translation>
     </message>
     <message>
-        <location filename="../qml/Main.qml" line="397"/>
+        <location filename="../qml/Main.qml" line="205"/>
+        <source> (Trial)</source>
+        <translation>（试用版）</translation>
+    </message>
+    <message>
+        <location filename="../qml/Main.qml" line="424"/>
         <source>IP：--</source>
         <translation>IP：--</translation>
     </message>
     <message>
-        <location filename="../qml/Main.qml" line="397"/>
+        <location filename="../qml/Main.qml" line="424"/>
         <source>IP：%1</source>
         <translation>IP：%1</translation>
     </message>
     <message>
-        <location filename="../qml/Main.qml" line="406"/>
+        <location filename="../qml/Main.qml" line="433"/>
         <source>分享：0 个活跃</source>
         <translation>分享：0 个活跃</translation>
     </message>
     <message>
-        <location filename="../qml/Main.qml" line="406"/>
+        <location filename="../qml/Main.qml" line="433"/>
         <source>分享：%1 个活跃</source>
         <translation>分享：%1 个活跃</translation>
     </message>
     <message>
-        <location filename="../qml/Main.qml" line="415"/>
+        <location filename="../qml/Main.qml" line="442"/>
         <source>就绪</source>
         <translation>就绪</translation>
     </message>
     <message>
-        <location filename="../qml/Main.qml" line="441"/>
+        <location filename="../qml/Main.qml" line="468"/>
         <source>发送</source>
         <translation>发送</translation>
     </message>
     <message>
-        <location filename="../qml/Main.qml" line="442"/>
+        <location filename="../qml/Main.qml" line="469"/>
         <source>接收</source>
         <translation>接收</translation>
     </message>
     <message>
-        <location filename="../qml/Main.qml" line="443"/>
+        <location filename="../qml/Main.qml" line="470"/>
         <source>传输</source>
         <translation>传输</translation>
     </message>
     <message>
-        <location filename="../qml/Main.qml" line="444"/>
+        <location filename="../qml/Main.qml" line="471"/>
         <source>LAN</source>
         <translation>LAN</translation>
     </message>
@@ -198,32 +203,32 @@ Click &quot;Scan Devices&quot; to search LAN</source>
 <context>
     <name>NetShareApplication</name>
     <message>
-        <location filename="../../main.cpp" line="619"/>
+        <location filename="../../main.cpp" line="655"/>
         <source>NetShare - 局域网文件共享</source>
         <translation>NetShare - 局域网文件共享</translation>
     </message>
     <message>
-        <location filename="../../main.cpp" line="645"/>
+        <location filename="../../main.cpp" line="684"/>
         <source>打开主窗口</source>
         <translation>打开主窗口</translation>
     </message>
     <message>
-        <location filename="../../main.cpp" line="651"/>
+        <location filename="../../main.cpp" line="690"/>
         <source>分享</source>
         <translation>分享</translation>
     </message>
     <message>
-        <location filename="../../main.cpp" line="657"/>
+        <location filename="../../main.cpp" line="696"/>
         <source>传输</source>
         <translation>传输</translation>
     </message>
     <message>
-        <location filename="../../main.cpp" line="663"/>
+        <location filename="../../main.cpp" line="702"/>
         <source>设置</source>
         <translation>设置</translation>
     </message>
     <message>
-        <location filename="../../main.cpp" line="669"/>
+        <location filename="../../main.cpp" line="708"/>
         <source>退出</source>
         <translation>退出</translation>
     </message>
@@ -378,6 +383,139 @@ Click &quot;Scan Devices&quot; to search LAN</source>
     </message>
 </context>
 <context>
+    <name>RegisterPage</name>
+    <message>
+        <location filename="../qml/RegisterPage.qml" line="33"/>
+        <source>Welcome to NetShare</source>
+        <translation>欢迎使用 NetShare</translation>
+    </message>
+    <message>
+        <location filename="../qml/RegisterPage.qml" line="41"/>
+        <source>Please register or try the software</source>
+        <translation>请注册或试用软件</translation>
+    </message>
+    <message>
+        <location filename="../qml/RegisterPage.qml" line="50"/>
+        <source>Machine Code</source>
+        <translation>机器码</translation>
+    </message>
+    <message>
+        <location filename="../qml/RegisterPage.qml" line="87"/>
+        <source>Copy</source>
+        <translation>复制</translation>
+    </message>
+    <message>
+        <location filename="../qml/RegisterPage.qml" line="99"/>
+        <source>Registration Information</source>
+        <translation>注册信息</translation>
+    </message>
+    <message>
+        <location filename="../qml/RegisterPage.qml" line="124"/>
+        <source>Username:</source>
+        <translation>用户名：</translation>
+    </message>
+    <message>
+        <location filename="../qml/RegisterPage.qml" line="131"/>
+        <source>4-20 chars, start with letter</source>
+        <translation>4-20个字符，字母开头</translation>
+    </message>
+    <message>
+        <location filename="../qml/RegisterPage.qml" line="152"/>
+        <source>Email:</source>
+        <translation>邮箱：</translation>
+    </message>
+    <message>
+        <location filename="../qml/RegisterPage.qml" line="159"/>
+        <source>your@email.com</source>
+        <translation>your@email.com</translation>
+    </message>
+    <message>
+        <location filename="../qml/RegisterPage.qml" line="180"/>
+        <source>Phone:</source>
+        <translation>手机号：</translation>
+    </message>
+    <message>
+        <location filename="../qml/RegisterPage.qml" line="187"/>
+        <source>11-digit phone number</source>
+        <translation>11位手机号码</translation>
+    </message>
+    <message>
+        <location filename="../qml/RegisterPage.qml" line="210"/>
+        <source>Registration Code</source>
+        <translation>注册码</translation>
+    </message>
+    <message>
+        <location filename="../qml/RegisterPage.qml" line="230"/>
+        <source>Paste registration code here</source>
+        <translation>在此粘贴注册码</translation>
+    </message>
+    <message>
+        <location filename="../qml/RegisterPage.qml" line="259"/>
+        <source>Trial</source>
+        <translation>试用</translation>
+    </message>
+    <message>
+        <location filename="../qml/RegisterPage.qml" line="266"/>
+        <source>Failed to enter trial mode</source>
+        <translation>进入试用模式失败</translation>
+    </message>
+    <message>
+        <location filename="../qml/RegisterPage.qml" line="273"/>
+        <source>Register</source>
+        <translation>注册</translation>
+    </message>
+    <message>
+        <location filename="../qml/RegisterPage.qml" line="282"/>
+        <source>Sending registration info...</source>
+        <translation>正在发送注册信息...</translation>
+    </message>
+    <message>
+        <location filename="../qml/RegisterPage.qml" line="294"/>
+        <source>Registration failed: invalid code</source>
+        <translation>注册失败：注册码无效</translation>
+    </message>
+    <message>
+        <location filename="../qml/RegisterPage.qml" line="302"/>
+        <source>Verify Code</source>
+        <translation>验证注册码</translation>
+    </message>
+    <message>
+        <location filename="../qml/RegisterPage.qml" line="312"/>
+        <source>Invalid registration code</source>
+        <translation>注册码无效</translation>
+    </message>
+    <message>
+        <location filename="../qml/RegisterPage.qml" line="326"/>
+        <source>Registration info sent. Please wait for registration code.</source>
+        <translation>注册信息已发送，请等待注册码。</translation>
+    </message>
+    <message>
+        <location filename="../qml/RegisterPage.qml" line="331"/>
+        <source>Failed to send: %1</source>
+        <translation>发送失败：%1</translation>
+    </message>
+    <message>
+        <location filename="../qml/RegisterPage.qml" line="335"/>
+        <source>Registration failed: %1</source>
+        <translation>注册失败：%1</translation>
+    </message>
+    <message>
+        <location filename="../qml/RegisterPage.qml" line="148"/>
+        <source>Trial</source>
+        <translation>试用</translation>
+    </message>
+    <message>
+        <location filename="../qml/RegisterPage.qml" line="165"/>
+        <source>Register</source>
+        <translation>注册</translation>
+    </message>
+    <message>
+        <location filename="../qml/RegisterPage.qml" line="197"/>
+        <source>Registration Code</source>
+        <translation>注册码</translation>
+    </message>
+</context>
+<context>
     <name>RequestHandler</name>
     <message>
         <location filename="../../network/RequestHandler.cpp" line="1113"/>
@@ -408,142 +546,177 @@ Click &quot;Scan Devices&quot; to search LAN</source>
         <translation>安全</translation>
     </message>
     <message>
-        <location filename="../qml/SettingsPage.qml" line="180"/>
+        <location filename="../qml/SettingsPage.qml" line="181"/>
         <source>General Settings</source>
         <translation>常规设置</translation>
     </message>
     <message>
-        <location filename="../qml/SettingsPage.qml" line="193"/>
+        <location filename="../qml/SettingsPage.qml" line="194"/>
         <source>Device Name</source>
         <translation>设备名称</translation>
     </message>
     <message>
-        <location filename="../qml/SettingsPage.qml" line="202"/>
+        <location filename="../qml/SettingsPage.qml" line="203"/>
         <source>Enter device name</source>
         <translation>输入设备名称</translation>
     </message>
     <message>
-        <location filename="../qml/SettingsPage.qml" line="257"/>
+        <location filename="../qml/SettingsPage.qml" line="258"/>
         <source>Language</source>
         <translation>语言</translation>
     </message>
     <message>
-        <location filename="../qml/SettingsPage.qml" line="280"/>
+        <location filename="../qml/SettingsPage.qml" line="281"/>
         <source>Auto Start</source>
         <translation>开机自启</translation>
     </message>
     <message>
-        <location filename="../qml/SettingsPage.qml" line="297"/>
+        <location filename="../qml/SettingsPage.qml" line="298"/>
         <source>Minimize to Tray</source>
         <translation>最小化到托盘</translation>
     </message>
     <message>
-        <location filename="../qml/SettingsPage.qml" line="310"/>
+        <location filename="../qml/SettingsPage.qml" line="311"/>
         <source>Show Notifications</source>
         <translation>显示通知</translation>
     </message>
     <message>
-        <location filename="../qml/SettingsPage.qml" line="330"/>
+        <location filename="../qml/SettingsPage.qml" line="331"/>
         <source>Network Settings</source>
         <translation>网络设置</translation>
     </message>
     <message>
-        <location filename="../qml/SettingsPage.qml" line="343"/>
+        <location filename="../qml/SettingsPage.qml" line="344"/>
         <source>Service Port</source>
         <translation>服务端口</translation>
     </message>
     <message>
-        <location filename="../qml/SettingsPage.qml" line="370"/>
+        <location filename="../qml/SettingsPage.qml" line="371"/>
         <source>Max Connections</source>
         <translation>最大连接数</translation>
     </message>
     <message>
-        <location filename="../qml/SettingsPage.qml" line="397"/>
+        <location filename="../qml/SettingsPage.qml" line="398"/>
         <source>Bandwidth Limit (KB/s)</source>
         <translation>带宽限制 (KB/s)</translation>
     </message>
     <message>
-        <location filename="../qml/SettingsPage.qml" line="406"/>
+        <location filename="../qml/SettingsPage.qml" line="407"/>
         <source>0 = Unlimited</source>
         <translation>0 = 无限制</translation>
     </message>
     <message>
-        <location filename="../qml/SettingsPage.qml" line="424"/>
+        <location filename="../qml/SettingsPage.qml" line="425"/>
         <source>Auto Detect IP</source>
         <translation>自动检测 IP</translation>
     </message>
     <message>
-        <location filename="../qml/SettingsPage.qml" line="440"/>
+        <location filename="../qml/SettingsPage.qml" line="441"/>
         <source>Manual IP Address</source>
         <translation>手动 IP 地址</translation>
     </message>
     <message>
-        <location filename="../qml/SettingsPage.qml" line="477"/>
+        <location filename="../qml/SettingsPage.qml" line="478"/>
         <source>Security Settings</source>
         <translation>安全设置</translation>
     </message>
     <message>
-        <location filename="../qml/SettingsPage.qml" line="490"/>
+        <location filename="../qml/SettingsPage.qml" line="491"/>
         <source>Access Password</source>
         <translation>访问密码</translation>
     </message>
     <message>
-        <location filename="../qml/SettingsPage.qml" line="505"/>
+        <location filename="../qml/SettingsPage.qml" line="506"/>
         <source>Password</source>
         <translation>密码</translation>
     </message>
     <message>
-        <location filename="../qml/SettingsPage.qml" line="516"/>
+        <location filename="../qml/SettingsPage.qml" line="517"/>
         <source>Set access password</source>
         <translation>设置访问密码</translation>
     </message>
     <message>
-        <location filename="../qml/SettingsPage.qml" line="536"/>
+        <location filename="../qml/SettingsPage.qml" line="537"/>
         <source>Allow Upload</source>
         <translation>允许上传</translation>
     </message>
     <message>
-        <location filename="../qml/SettingsPage.qml" line="549"/>
+        <location filename="../qml/SettingsPage.qml" line="550"/>
         <source>Allow Delete</source>
         <translation>允许删除</translation>
     </message>
     <message>
-        <location filename="../qml/SettingsPage.qml" line="561"/>
+        <location filename="../qml/SettingsPage.qml" line="562"/>
         <source>Access Log</source>
         <translation>访问日志</translation>
     </message>
     <message>
-        <location filename="../qml/SettingsPage.qml" line="580"/>
+        <location filename="../qml/SettingsPage.qml" line="581"/>
         <source>Reset to Defaults</source>
         <translation>恢复默认</translation>
     </message>
     <message>
-        <location filename="../qml/SettingsPage.qml" line="617"/>
+        <location filename="../qml/SettingsPage.qml" line="742"/>
+        <source>Registration Information</source>
+        <translation>注册信息</translation>
+    </message>
+    <message>
+        <location filename="../qml/SettingsPage.qml" line="753"/>
+        <source>Username</source>
+        <translation>用户名</translation>
+    </message>
+    <message>
+        <location filename="../qml/SettingsPage.qml" line="773"/>
+        <source>Registered</source>
+        <translation>注册日期</translation>
+    </message>
+    <message>
+        <location filename="../qml/SettingsPage.qml" line="796"/>
+        <source>Trial Version</source>
+        <translation>试用版</translation>
+    </message>
+    <message>
+        <location filename="../qml/SettingsPage.qml" line="807"/>
+        <source>Machine Code</source>
+        <translation>机器码</translation>
+    </message>
+    <message>
+        <location filename="../qml/SettingsPage.qml" line="829"/>
+        <source>Copy</source>
+        <translation>复制</translation>
+    </message>
+    <message>
+        <location filename="../qml/SettingsPage.qml" line="838"/>
+        <source>Register</source>
+        <translation>注册</translation>
+    </message>
+    <message>
+        <location filename="../qml/SettingsPage.qml" line="960"/>
         <source>OK</source>
         <translation>确定</translation>
     </message>
     <message>
-        <location filename="../qml/SettingsPage.qml" line="623"/>
+        <location filename="../qml/SettingsPage.qml" line="949"/>
         <source>语言设置</source>
         <translation>语言设置</translation>
     </message>
     <message>
-        <location filename="../qml/SettingsPage.qml" line="612"/>
+        <location filename="../qml/SettingsPage.qml" line="955"/>
         <source>语言设置将在重启后生效</source>
         <translation>语言设置将在重启后生效</translation>
     </message>
     <message>
-        <location filename="../qml/SettingsPage.qml" line="219"/>
+        <location filename="../qml/SettingsPage.qml" line="220"/>
         <source>Theme</source>
         <translation>主题</translation>
     </message>
     <message>
-        <location filename="../qml/SettingsPage.qml" line="230"/>
+        <location filename="../qml/SettingsPage.qml" line="231"/>
         <source>Dark</source>
         <translation>暗色</translation>
     </message>
     <message>
-        <location filename="../qml/SettingsPage.qml" line="231"/>
+        <location filename="../qml/SettingsPage.qml" line="232"/>
         <source>Light</source>
         <translation>亮色</translation>
     </message>
@@ -578,29 +751,64 @@ Click &quot;Scan Devices&quot; to search LAN</source>
         <translation>Qt 版本</translation>
     </message>
     <message>
-        <location filename="../qml/SettingsPage.qml" line="733"/>
+        <location filename="../qml/SettingsPage.qml" line="860"/>
         <source>Contact</source>
         <translation>联系</translation>
     </message>
     <message>
-        <location filename="../qml/SettingsPage.qml" line="763"/>
+        <location filename="../qml/SettingsPage.qml" line="890"/>
         <source>Check for Updates</source>
         <translation>检查更新</translation>
     </message>
     <message>
-        <location filename="../qml/SettingsPage.qml" line="785"/>
+        <location filename="../qml/SettingsPage.qml" line="912"/>
         <source>Checking for updates...</source>
         <translation>正在检查更新...</translation>
     </message>
     <message>
-        <location filename="../qml/SettingsPage.qml" line="802"/>
+        <location filename="../qml/SettingsPage.qml" line="929"/>
         <source>You are using the latest version.</source>
         <translation>您正在使用最新版本。</translation>
     </message>
     <message>
-        <location filename="../qml/SettingsPage.qml" line="810"/>
+        <location filename="../qml/SettingsPage.qml" line="937"/>
         <source>All rights reserved.</source>
         <translation>保留所有权利。</translation>
+    </message>
+    <message>
+        <location filename="../qml/SettingsPage.qml" line="755"/>
+        <source>Re-register</source>
+        <translation>重新注册</translation>
+    </message>
+    <message>
+        <location filename="../qml/SettingsPage.qml" line="777"/>
+        <source>Reg. Code</source>
+        <translation>注册码</translation>
+    </message>
+    <message>
+        <location filename="../qml/SettingsPage.qml" line="954"/>
+        <source>Confirm Re-registration</source>
+        <translation>确认重新注册</translation>
+    </message>
+    <message>
+        <location filename="../qml/SettingsPage.qml" line="960"/>
+        <source>Clear registration data and return to unregistered state?</source>
+        <translation>确定要清除注册数据，返回未注册状态吗？</translation>
+    </message>
+    <message>
+        <location filename="../qml/SettingsPage.qml" line="970"/>
+        <source>Cancel</source>
+        <translation>取消</translation>
+    </message>
+    <message>
+        <location filename="../qml/SettingsPage.qml" line="975"/>
+        <source>Confirm</source>
+        <translation>确定</translation>
+    </message>
+    <message>
+        <location filename="../qml/SettingsPage.qml" line="962"/>
+        <source>Not Registered</source>
+        <translation>未注册</translation>
     </message>
 </context>
 <context>
@@ -916,17 +1124,17 @@ Click &quot;New Share&quot; to start</source>
     <message>
         <location filename="../qml/TransferList.qml" line="222"/>
         <source>just now</source>
-        <translation type="unfinished"></translation>
+        <translation>刚刚</translation>
     </message>
     <message>
         <location filename="../qml/TransferList.qml" line="224"/>
         <source>%1m ago</source>
-        <translation type="unfinished"></translation>
+        <translation>%1分钟前</translation>
     </message>
     <message>
         <location filename="../qml/TransferList.qml" line="226"/>
         <source>%1h ago</source>
-        <translation type="unfinished"></translation>
+        <translation>%1小时前</translation>
     </message>
     <message>
         <location filename="../qml/TransferList.qml" line="269"/>
@@ -982,12 +1190,12 @@ Click &quot;New Share&quot; to start</source>
         <location filename="../qml/TransferList.qml" line="559"/>
         <location filename="../qml/TransferList.qml" line="564"/>
         <source>Elapsed: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>已用时间：%1</translation>
     </message>
     <message>
         <location filename="../qml/TransferList.qml" line="580"/>
         <source>ETA: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>预计剩余：%1</translation>
     </message>
 </context>
 </TS>

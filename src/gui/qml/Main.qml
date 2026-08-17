@@ -30,6 +30,9 @@ ApplicationWindow {
 
     property bool isSettingsPage: false
 
+    property bool isRegistered: authService ? authService.isRegistered() : false
+    property bool isTrialMode: authService ? authService.isTrialMode() : false
+
     function switchToPage(pageIndex) {
         if (pageIndex >= 0 && pageIndex < pageStack.length) {
             menuList.currentIndex = pageIndex
@@ -145,16 +148,41 @@ ApplicationWindow {
 
     Component.onCompleted: {
         console.log("MainWindow loaded")
+        // Initialize navigation selection to first tab (Send)
+        menuList.currentIndex = 0
+        if (!authService) return
+
+        if (authService.isRegistered()) {
+            // 已注册：校验机器码匹配度，<60分需重新注册
+            if (!authService.verifyMachineMatch()) {
+                console.warn("Machine mismatch detected, requiring re-registration")
+                registerPopup.open()
+            }
+            // 已注册且机器码匹配：不弹窗，直接使用
+        } else {
+            // 未注册（含试用用户）：弹窗注册页面
+            registerPopup.open()
+        }
     }
 
-    // Custom title bar
-    Rectangle {
-        id: titleBar
-        anchors.top: parent.top
-        anchors.left: parent.left
-        anchors.right: parent.right
-        height: 32
-        color: Theme.backgroundColor
+    // 注册弹窗
+    RegisterPage {
+        id: registerPopup
+        parent: Overlay.overlay
+    }
+
+    // Root layout: column-based to guarantee all sections visible
+    ColumnLayout {
+        id: mainLayout
+        anchors.fill: parent
+        spacing: 0
+
+        // Custom title bar
+        Rectangle {
+            id: titleBar
+            Layout.fillWidth: true
+            Layout.preferredHeight: 32
+            color: Theme.backgroundColor
 
         // Draggable area for moving the window
         MouseArea {
@@ -189,7 +217,7 @@ ApplicationWindow {
             }
 
             Label {
-                text: root.title
+                text: root.title + (root.isTrialMode ? qsTr(" (Trial)") : "")
                 color: Theme.textSecondary
                 font.pixelSize: 12
             }
@@ -212,7 +240,7 @@ ApplicationWindow {
             }
 
             Rectangle {
-                visible: typeof chatService !== 'undefined' && chatService.totalUnreadCount > 0
+                visible: chatService && chatService.totalUnreadCount > 0
                 anchors.right: parent.right
                 anchors.top: parent.top
                 anchors.rightMargin: 8
@@ -225,7 +253,7 @@ ApplicationWindow {
                 Label {
                     anchors.centerIn: parent
                     text: {
-                        if (typeof chatService === 'undefined') return ""
+                        if (!chatService) return ""
                         var c = chatService.totalUnreadCount
                         return c > 99 ? "99+" : c
                     }
@@ -363,10 +391,199 @@ ApplicationWindow {
         }
     }
 
-    // Resize handles for frameless window
+        // Main content area
+        Item {
+            id: contentArea
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+
+            Rectangle {
+                id: sidebar
+                anchors.left: parent.left
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                width: root.isSettingsPage ? 0 : 200
+                color: Theme.sidebarColor
+                clip: true
+
+                Behavior on width {
+                    NumberAnimation { duration: 200; easing.type: Easing.InOutQuad }
+                }
+
+                ListView {
+                    id: menuList
+                    anchors.fill: parent
+                    anchors.topMargin: 8
+
+                    model: ListModel {
+                        ListElement { title: qsTr("发送"); icon: "qrc:/qt/qml/NetShare/qml/icons/send.svg"; isSvg: true }
+                        ListElement { title: qsTr("接收"); icon: "qrc:/qt/qml/NetShare/qml/icons/receive.svg"; isSvg: true }
+                        ListElement { title: qsTr("传输"); icon: "⇅"; isSvg: false }
+                        ListElement { title: qsTr("LAN"); icon: "🌐"; isSvg: false }
+                    }
+
+                    delegate: Item {
+                        width: parent.width
+                        height: 48
+
+                        // Explicit binding to currentIndex - avoids unreliable ListView.isCurrentItem
+                        readonly property bool isCurrent: menuList.currentIndex === index
+
+                        // Selection indicator - left accent bar
+                        Rectangle {
+                            anchors.left: parent.left
+                            anchors.top: parent.top
+                            anchors.bottom: parent.bottom
+                            anchors.topMargin: 10
+                            anchors.bottomMargin: 10
+                            width: 3
+                            radius: 2
+                            color: isCurrent ? Theme.accentColor : "transparent"
+                            visible: isCurrent
+                        }
+
+                        Rectangle {
+                            id: navBg
+                            anchors.fill: parent
+                            anchors.leftMargin: 8
+                            anchors.rightMargin: 8
+                            radius: 4
+                            // Selection background takes priority over hover
+                            color: isCurrent ? Theme.accentColor
+                                 : (navMouseArea.containsMouse ? Theme.hoverColor : "transparent")
+
+                            Behavior on color {
+                                ColorAnimation { duration: 150 }
+                            }
+
+                            MouseArea {
+                                id: navMouseArea
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    menuList.currentIndex = index
+                                    root.isSettingsPage = false
+                                    stackView.replace(pageStack[index])
+                                }
+                            }
+
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 12
+                                spacing: 8
+
+                                Loader {
+                                    sourceComponent: isSvg ? svgIconComponent : emojiIconComponent
+                                    Layout.preferredWidth: 24
+                                    Layout.preferredHeight: 24
+                                    Layout.alignment: Qt.AlignVCenter
+                                    property string iconSource: icon
+
+                                    Component {
+                                        id: svgIconComponent
+                                        Item {
+                                            width: 20; height: 20
+                                            Image {
+                                                id: svgIcon
+                                                source: iconSource
+                                                sourceSize.width: 20
+                                                sourceSize.height: 20
+                                                visible: false
+                                            }
+                                            MultiEffect {
+                                                anchors.fill: svgIcon
+                                                source: svgIcon
+                                                colorization: 1.0
+                                                colorizationColor: isCurrent ? Theme.textOnAccentColor : Theme.textColor
+                                            }
+                                        }
+                                    }
+
+                                    Component {
+                                        id: emojiIconComponent
+                                        Label {
+                                            text: iconSource
+                                            font.pixelSize: 18
+                                            color: isCurrent ? Theme.textOnAccentColor : Theme.textColor
+                                            verticalAlignment: Text.AlignVCenter
+                                            horizontalAlignment: Text.AlignHCenter
+                                        }
+                                    }
+                                }
+
+                                Label {
+                                    text: title
+                                    color: isCurrent ? Theme.textOnAccentColor : Theme.textColor
+                                    font.pixelSize: 14
+                                    Layout.alignment: Qt.AlignVCenter
+                                }
+
+                                Item { Layout.fillWidth: true }
+                            }
+                        }
+                    }
+                }
+            }
+
+            StackView {
+                id: stackView
+                anchors.left: sidebar.right
+                anchors.top: parent.top
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+
+                replaceEnter: Transition {}
+                replaceExit: Transition {}
+
+                initialItem: shareManagementPage
+            }
+        }
+
+        // Status bar
+        Rectangle {
+            id: statusBar
+            Layout.fillWidth: true
+            Layout.preferredHeight: 28
+            color: Theme.sidebarColor
+
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 12
+                anchors.rightMargin: 12
+
+                Label {
+                    id: statusBarLeft
+                    text: typeof shareManager !== 'undefined' ? qsTr("IP：%1").arg(shareManager.localIp) : qsTr("IP：--")
+                    color: Theme.textSecondary
+                    font.pixelSize: 11
+                }
+
+                Item { Layout.fillWidth: true }
+
+                Label {
+                    id: statusBarCenter
+                    text: typeof shareManager !== 'undefined' ? qsTr("分享：%1 个活跃").arg(shareManager.getActiveShareCount()) : qsTr("分享：0 个活跃")
+                    color: Theme.textSecondary
+                    font.pixelSize: 11
+                }
+
+                Item { Layout.fillWidth: true }
+
+                Label {
+                    id: statusBarRight
+                    text: qsTr("就绪")
+                    color: Theme.textSecondary
+                    font.pixelSize: 11
+                }
+            }
+        }
+    }
+
+    // Resize handles for frameless window (outside mainLayout)
     MouseArea {
         anchors.left: parent.left
-        anchors.top: titleBar.bottom
+        anchors.top: parent.top
         anchors.bottom: parent.bottom
         width: 4
         cursorShape: Qt.SizeHorCursor
@@ -374,7 +591,7 @@ ApplicationWindow {
     }
     MouseArea {
         anchors.right: parent.right
-        anchors.top: titleBar.bottom
+        anchors.top: parent.top
         anchors.bottom: parent.bottom
         width: 4
         cursorShape: Qt.SizeHorCursor
@@ -395,165 +612,6 @@ ApplicationWindow {
         height: 4
         cursorShape: Qt.SizeVerCursor
         onPressed: root.startSystemResize(Qt.BottomEdge)
-    }
-
-    footer: Rectangle {
-        height: 28
-        color: Theme.sidebarColor
-
-        RowLayout {
-            anchors.fill: parent
-            anchors.leftMargin: 12
-            anchors.rightMargin: 12
-
-            Label {
-                id: statusBarLeft
-                text: typeof shareManager !== 'undefined' ? qsTr("IP：%1").arg(shareManager.localIp) : qsTr("IP：--")
-                color: Theme.textSecondary
-                font.pixelSize: 11
-            }
-
-            Item { Layout.fillWidth: true }
-
-            Label {
-                id: statusBarCenter
-                text: typeof shareManager !== 'undefined' ? qsTr("分享：%1 个活跃").arg(shareManager.getActiveShareCount()) : qsTr("分享：0 个活跃")
-                color: Theme.textSecondary
-                font.pixelSize: 11
-            }
-
-            Item { Layout.fillWidth: true }
-
-            Label {
-                id: statusBarRight
-                text: qsTr("就绪")
-                color: Theme.textSecondary
-                font.pixelSize: 11
-            }
-        }
-    }
-
-    Rectangle {
-        id: sidebar
-        anchors.left: parent.left
-        anchors.top: titleBar.bottom
-        anchors.bottom: parent.bottom
-        width: root.isSettingsPage ? 0 : 200
-        color: Theme.sidebarColor
-        clip: true
-
-        Behavior on width {
-            NumberAnimation { duration: 200; easing.type: Easing.InOutQuad }
-        }
-
-        ListView {
-            id: menuList
-            anchors.fill: parent
-            anchors.topMargin: 8
-
-            model: ListModel {
-                ListElement { title: qsTr("发送"); icon: "qrc:/qt/qml/NetShare/qml/icons/send.svg"; isSvg: true }
-                ListElement { title: qsTr("接收"); icon: "qrc:/qt/qml/NetShare/qml/icons/receive.svg"; isSvg: true }
-                ListElement { title: qsTr("传输"); icon: "⇅"; isSvg: false }
-                ListElement { title: qsTr("LAN"); icon: "🌐"; isSvg: false }
-            }
-
-            delegate: Item {
-                width: parent.width
-                height: 48
-
-                Rectangle {
-                    id: navBg
-                    anchors.fill: parent
-                    anchors.leftMargin: 8
-                    anchors.rightMargin: 8
-                    radius: 4
-                    color: {
-                        if (ListView.isCurrentItem) return Theme.accentColor
-                        if (navMouseArea.containsMouse) return Theme.hoverColor
-                        return "transparent"
-                    }
-
-                    Behavior on color {
-                        ColorAnimation { duration: 150 }
-                    }
-
-                    MouseArea {
-                        id: navMouseArea
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            menuList.currentIndex = index
-                            root.isSettingsPage = false
-                            stackView.replace(pageStack[index])
-                        }
-                    }
-
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 12
-
-                        Loader {
-                            sourceComponent: isSvg ? svgIconComponent : emojiIconComponent
-                            property string iconSource: icon
-                            property bool isSelected: ListView.isCurrentItem
-
-                            Component {
-                                id: svgIconComponent
-                                Item {
-                                    width: 18
-                                    height: 18
-                                    Image {
-                                        id: svgIcon
-                                        source: iconSource
-                                        sourceSize.width: 18
-                                        sourceSize.height: 18
-                                        visible: false
-                                    }
-                                    MultiEffect {
-                                        anchors.fill: svgIcon
-                                        source: svgIcon
-                                        colorization: 1.0
-                                        colorizationColor: isSelected ? Theme.textOnAccentColor : Theme.textColor
-                                    }
-                                }
-                            }
-
-                            Component {
-                                id: emojiIconComponent
-                                Label {
-                                    text: iconSource
-                                    font.pixelSize: 18
-                                    color: isSelected ? Theme.textOnAccentColor : Theme.textColor
-                                }
-                            }
-                        }
-
-                        Label {
-                            text: title
-                            color: ListView.isCurrentItem ? Theme.textOnAccentColor : Theme.textColor
-                            font.pixelSize: 14
-                        }
-
-                        Item { Layout.fillWidth: true }
-                    }
-                }
-            }
-        }
-    }
-
-    StackView {
-        id: stackView
-        anchors.left: sidebar.right
-        anchors.top: titleBar.bottom
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
-
-        replaceEnter: Transition {}
-        replaceExit: Transition {}
-
-        initialItem: shareManagementPage
     }
 
     Component {
@@ -596,6 +654,9 @@ ApplicationWindow {
                 menuList.currentIndex = 0
                 root.isSettingsPage = false
                 stackView.replace(shareManagementPage)
+            }
+            onOpenRegister: {
+                registerPopup.open()
             }
         }
     }

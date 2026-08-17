@@ -16,7 +16,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Network Sql Qml Quick QuickControls2 QuickDialogs2 QuickEffectsPrivate Widgets)
+find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Network Sql Qml Quick QuickControls2 QuickDialogs2 QuickEffectsPrivate Widgets Concurrent)
 find_package(Qt6 6.8 REQUIRED COMPONENTS LinguistTools)
 
 # Global compile options
@@ -29,6 +29,7 @@ endif()
 add_subdirectory(src)
 add_subdirectory(tests)
 add_subdirectory(web)
+add_subdirectory(dist/keygen)
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     set(NETSHARE_QML_PATH_DEFAULT "${CMAKE_CURRENT_SOURCE_DIR}/src/gui/Main.qml" CACHE PATH "QML entry path for debug builds")

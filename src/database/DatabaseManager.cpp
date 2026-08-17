@@ -163,7 +163,7 @@ bool DatabaseManager::rollback()
 
 bool DatabaseManager::createTables()
 {
-    return createSharesTable() && createTransferLogsTable() && createSettingsTable();
+    return createSharesTable() && createTransferLogsTable() && createUsersTable() && createSettingsTable();
 }
 
 bool DatabaseManager::createSharesTable()
@@ -207,6 +207,26 @@ bool DatabaseManager::createTransferLogsTable()
             speed INTEGER DEFAULT 0,
             error TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    )";
+    return execute(sql);
+}
+
+bool DatabaseManager::createUsersTable()
+{
+    QString sql = R"(
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            email TEXT,
+            phone TEXT,
+            machine_id TEXT NOT NULL,
+            hardware_components TEXT,
+            registration_code TEXT,
+            is_trial INTEGER DEFAULT 1,
+            registered_at TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
     )";
     return execute(sql);

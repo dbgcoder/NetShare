@@ -46,7 +46,7 @@ Rectangle {
             deviceType: "desktop"
         })
 
-        if (typeof chatService !== 'undefined') {
+        if (chatService) {
             var users = chatService.getUserList()
             for (var i = 0; i < users.length; i++) {
                 var u = users[i]
@@ -290,7 +290,7 @@ Rectangle {
                                     function finishEdit(save) {
                                         if (saving) return
                                         saving = true
-                                        if (save && text.trim().length > 0 && text.trim() !== model.name && typeof chatService !== 'undefined') {
+                                        if (save && text.trim().length > 0 && text.trim() !== model.name && chatService) {
                                             chatService.renameDevice(model.address, text.trim())
                                         }
                                         editNameField.visible = false

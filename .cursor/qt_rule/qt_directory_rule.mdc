@@ -1,0 +1,346 @@
+---
+description: 创建、移动、重命名文件或目录时使用；规定 Qt 项目的标准目录结构和文件放置位置
+globs:
+  - "**/*.cpp"
+  - "**/*.h"
+  - "**/*.hpp"
+  - "**/*.qml"
+  - "**/CMakeLists.txt"
+alwaysApply: false
+---
+
+# 创建规则：目录与位置
+
+## 1. 使用时机
+
+当需要创建、移动、重命名以下内容时，必须使用本规则：
+
+- 新文件；
+- 新目录；
+- C++ 类文件；
+- QML 页面；
+- QML 组件；
+- 测试文件；
+- CMake 模块；
+- 资源文件；
+- 文档文件；
+- 脚本文件。
+
+目标：让 AI 在创建内容前先判断“应该放在哪里”。
+
+---
+
+## 2. 标准目录结构
+
+项目统一采用以下结构：
+
+```text
+MyProject/
+├── CMakeLists.txt
+│
+├── cmake/                         # CMake 模块/脚本
+│
+├── app/
+│   ├── CMakeLists.txt
+│   ├── main.cpp
+│   └── MainWindow.cpp
+│
+├── src/
+│   ├── CMakeLists.txt
+│   ├── core/                       # 核心业务逻辑（与 UI 无关）
+│   ├── gui/                        # Widgets、窗口、对话框、视图组件
+│   ├── service/                    # 业务服务，比如下载、解析、任务调度
+│   ├── models/                     # 数据模型、状态模型、Qt Model/View 模型
+│   ├── controller/                 # UI 与业务逻辑之间的协调层
+│   ├── infrastructure/             # 日志、配置、数据库、网络、文件系统
+│   └── platform/                   # Windows/macOS/Linux 平台差异代码
+│
+├── qml/
+│   ├── Main.qml
+│   ├── components/
+│   ├── pages/
+│   └── themes/
+│
+├── resources/                      # 图标、图片、字体、QRC 资源
+│   ├── icons/
+│   ├── images/
+│   └── resources.qrc
+│
+├── translations/
+│   ├── MyProject_zh_CN.ts
+│   └── MyProject_en_US.ts
+│
+├── docs/                           # 项目文档
+│   ├── architecture.md
+│   └── performance.md
+│
+├── tests/
+├── plugins/
+├── 3rdparty/
+│
+├── tools/
+│   ├── scripts/
+│   └── devtools/
+│
+└── build/
+```
+
+根目录只允许放项目级配置文件和一级功能目录。
+
+禁止在根目录随意创建：
+
+- `.cpp`
+- `.h`
+- `.hpp`
+- `.qml`
+- 图片资源
+- 临时文件
+- 测试文件
+- 打包产物
+
+---
+
+## 3. 创建位置规则
+
+### 3.1 app/
+
+用于应用入口和启动组装代码：
+
+- `main.cpp`
+- `MainWindow.cpp`
+- 应用初始化代码
+- 顶层窗口装配代码
+
+不得把核心业务逻辑放入 `app/`。
+
+### 3.2 src/core/
+
+用于核心业务逻辑，必须与 UI 无关。
+
+适合放入：
+
+- 领域对象；
+- 核心规则；
+- 通用业务算法；
+- 与界面无关的数据处理；
+- 项目核心状态机。
+
+示例：
+
+```text
+src/core/TaskScheduler.cpp
+src/core/MediaItem.cpp
+src/core/VideoAnalysisRule.cpp
+```
+
+### 3.3 src/gui/
+
+用于 Qt Widgets、窗口、对话框、视图组件。
+
+适合放入：
+
+- `QWidget`
+- `QMainWindow`
+- `QDialog`
+- Widgets 视图类
+- 非 QML 的传统 GUI 组件
+
+如果界面使用 QML，应优先放入 `qml/`，不要放入 `src/gui/`。
+
+### 3.4 src/service/
+
+用于业务服务。
+
+适合放入：
+
+- 下载服务；
+- 视频解析服务；
+- 图片处理服务；
+- 任务调度服务；
+- 缩略图生成服务；
+- 业务流程编排服务。
+
+示例：
+
+```text
+src/service/DownloadService.cpp
+src/service/VideoThumbnailService.cpp
+src/service/MetadataParseService.cpp
+```
+
+### 3.5 src/models/
+
+用于数据模型、状态模型、Qt Model/View 模型。
+
+适合放入：
+
+- `QAbstractListModel`
+- `QAbstractTableModel`
+- 状态模型；
+- 视图数据模型；
+- QML 暴露模型。
+
+示例：
+
+```text
+src/models/VideoListModel.cpp
+src/models/TaskStatusModel.cpp
+```
+
+### 3.6 src/controller/
+
+用于 UI 与业务逻辑之间的协调层。
+
+适合放入：
+
+- 页面控制器；
+- QML 调用入口；
+- UI 状态协调；
+- 将 service/model 组合给 UI 使用的中间层。
+
+示例：
+
+```text
+src/controller/VideoPageController.cpp
+src/controller/SettingsController.cpp
+```
+
+Controller 不应包含底层数据库、网络、文件系统实现。
+
+### 3.7 src/infrastructure/
+
+用于基础设施能力。
+
+适合放入：
+
+- 日志；
+- 配置；
+- 数据库；
+- 网络；
+- 文件系统；
+- 缓存；
+- 平台无关的系统封装。
+
+示例：
+
+```text
+src/infrastructure/Logger.cpp
+src/infrastructure/ConfigManager.cpp
+src/infrastructure/DatabaseManager.cpp
+src/infrastructure/HttpClient.cpp
+src/infrastructure/FileSystem.cpp
+```
+
+### 3.8 src/platform/
+
+用于平台差异代码。
+
+适合放入：
+
+- Windows 专用实现；
+- macOS 专用实现；
+- Linux 专用实现；
+- 系统 API 差异封装。
+
+示例：
+
+```text
+src/platform/WindowsFileDialog.cpp
+src/platform/MacOSMediaPermission.cpp
+```
+
+### 3.9 qml/
+
+用于 QML 界面。
+
+规则：
+
+- 应用入口：`qml/Main.qml`
+- 页面：`qml/pages/`
+- 可复用组件：`qml/components/`
+- 主题：`qml/themes/`
+
+示例：
+
+```text
+qml/pages/HomePage.qml
+qml/pages/SettingsPage.qml
+qml/components/RoundButton.qml
+qml/components/VideoCard.qml
+qml/themes/AppTheme.qml
+```
+
+### 3.10 resources/
+
+用于资源文件。
+
+规则：
+
+- 图标放入 `resources/icons/`
+- 图片放入 `resources/images/`
+- QRC 放入 `resources/resources.qrc`
+
+### 3.11 translations/
+
+用于翻译文件。
+
+示例：
+
+```text
+translations/MyProject_zh_CN.ts
+translations/MyProject_en_US.ts
+```
+
+### 3.12 docs/
+
+用于项目文档。
+
+示例：
+
+```text
+docs/architecture.md
+docs/performance.md
+docs/api.md
+```
+
+### 3.13 tools/
+
+用于脚本和开发工具。
+
+规则：
+
+- 脚本放入 `tools/scripts/`
+- 开发辅助工具放入 `tools/devtools/`
+
+### 3.14 plugins/
+
+用于插件模块。
+
+### 3.15 3rdparty/
+
+用于第三方依赖源码或本地第三方库。
+
+优先使用包管理器、`find_package` 或 `FetchContent`，不要随意复制第三方源码。
+
+---
+
+## 4. AI 创建前目录检查清单
+
+创建任何文件、目录、类文件、QML 组件前，必须先判断：
+
+1. 这是 UI、业务、模型、服务、基础设施、平台代码还是资源？
+2. 应该放入哪个目录？
+3. QML 是否应放入 `pages/`、`components/` 或 `themes/`？
+4. 是否需要同步更新 `CMakeLists.txt`？
+5. 是否需要新增测试？
+6. 是否违反“QML 负责界面，C++ 负责逻辑”？
+
+---
+
+## 5. 强制禁止
+
+禁止把文件直接放在根目录。
+
+禁止因为方便而跳过目录判断。
+
+禁止创建 C++ 文件后不更新 CMake。

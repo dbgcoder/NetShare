@@ -8,8 +8,20 @@ Rectangle {
     color: Theme.backgroundColor
 
     signal closeSettings()
+    signal openRegister()
 
     property int currentSection: 0
+    property bool registeredState: authService ? authService.isRegistered() : false
+
+    Connections {
+        target: authService
+        function onRegistrationCleared() {
+            registeredState = false
+        }
+        function onRegistrationSuccess() {
+            registeredState = true
+        }
+    }
 
     function formatBytes(bytes) {
         if (bytes <= 0) return "0 B"
@@ -94,16 +106,21 @@ Rectangle {
                         RowLayout {
                             anchors.fill: parent
                             anchors.leftMargin: 10
+                            spacing: 2
 
                             Label {
                                 text: modelData.icon
                                 font.pixelSize: 16
+                                Layout.preferredWidth: 16
+                                Layout.alignment: Qt.AlignVCenter
+                                horizontalAlignment: Text.AlignHCenter
                             }
 
                             Label {
                                 text: modelData.title
                                 color: currentSection === index ? Theme.textOnAccentColor : Theme.textColor
                                 font.pixelSize: 14
+                                Layout.alignment: Qt.AlignVCenter
                             }
                         }
 
@@ -725,6 +742,206 @@ Rectangle {
                             Item { Layout.fillWidth: true }
                         }
 
+                        // 注册信息展示区
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 1
+                            color: Theme.borderColor
+                        }
+
+                        // 已注册状态
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 8
+                            visible: authService && registeredState
+
+                            RowLayout {
+                                Layout.fillWidth: true
+
+                                Label {
+                                    text: qsTr("Registration Information")
+                                    font.pixelSize: 14
+                                    font.bold: true
+                                    color: Theme.textColor
+                                }
+
+                                Item { Layout.fillWidth: true }
+
+                                Button {
+                                    text: qsTr("Re-register")
+                                    font.pixelSize: 12
+                                    palette.buttonText: "#e53935"
+                                    background: Rectangle {
+                                        color: Theme.surfaceColor
+                                        border.color: "#e53935"
+                                        radius: 4
+                                        implicitWidth: 90
+                                        implicitHeight: 28
+                                    }
+                                    onClicked: {
+                                        reRegisterDialog.open()
+                                    }
+                                }
+                            }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 12
+
+                                Label {
+                                    text: qsTr("Username")
+                                    color: Theme.textSecondary
+                                    font.pixelSize: 14
+                                    Layout.preferredWidth: 100
+                                }
+
+                                Label {
+                                    text: authService ? authService.registeredUsername() : ""
+                                    color: Theme.textColor
+                                    font.pixelSize: 14
+                                }
+
+                                Item { Layout.fillWidth: true }
+                            }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 12
+
+                                Label {
+                                    text: qsTr("Reg. Code")
+                                    color: Theme.textSecondary
+                                    font.pixelSize: 14
+                                    Layout.preferredWidth: 100
+                                }
+
+                                TextField {
+                                    id: aboutRegCodeField
+                                    Layout.fillWidth: true
+                                    text: authService ? authService.registeredCode() : ""
+                                    readOnly: true
+                                    selectByMouse: true
+                                    font.pixelSize: 11
+                                    font.family: "Consolas"
+                                    color: Theme.textColor
+                                    background: Rectangle {
+                                        color: Theme.backgroundColor
+                                        border.color: Theme.borderColor
+                                        radius: 3
+                                    }
+                                }
+
+                                Button {
+                                    text: qsTr("Copy")
+                                    font.pixelSize: 12
+                                    palette.buttonText: Theme.textColor
+                                    background: Rectangle {
+                                        color: Theme.surfaceColor
+                                        border.color: Theme.borderColor
+                                        radius: 4
+                                        implicitWidth: 60
+                                        implicitHeight: 28
+                                    }
+                                    onClicked: {
+                                        aboutRegCodeField.selectAll()
+                                        aboutRegCodeField.copy()
+                                    }
+                                }
+                            }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 12
+
+                                Label {
+                                    text: qsTr("Registered")
+                                    color: Theme.textSecondary
+                                    font.pixelSize: 14
+                                    Layout.preferredWidth: 100
+                                }
+
+                                Label {
+                                    text: authService ? authService.registeredDate() : ""
+                                    color: Theme.textColor
+                                    font.pixelSize: 14
+                                }
+
+                                Item { Layout.fillWidth: true }
+                            }
+                        }
+
+                        // 试用模式状态
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 8
+                            visible: authService && authService.isTrialMode() && !registeredState
+
+                            Label {
+                                text: qsTr("Trial Version")
+                                font.pixelSize: 14
+                                font.bold: true
+                                color: "#ff9800"
+                            }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 12
+
+                                Label {
+                                    text: qsTr("Machine Code")
+                                    color: Theme.textSecondary
+                                    font.pixelSize: 14
+                                    Layout.preferredWidth: 100
+                                }
+
+                                TextField {
+                                    id: aboutMachineIdField
+                                    Layout.fillWidth: true
+                                    text: authService ? authService.currentMachineId() : ""
+                                    readOnly: true
+                                    selectByMouse: true
+                                    font.pixelSize: 12
+                                    color: Theme.textColor
+                                    background: Rectangle {
+                                        color: Theme.backgroundColor
+                                        border.color: Theme.borderColor
+                                        radius: 3
+                                    }
+                                }
+
+                                Button {
+                                    text: qsTr("Copy")
+                                    palette.buttonText: Theme.textColor
+                                    background: Rectangle {
+                                        color: Theme.surfaceColor
+                                        border.color: Theme.borderColor
+                                        radius: 4
+                                        implicitWidth: 60
+                                        implicitHeight: 28
+                                    }
+                                    onClicked: {
+                                        aboutMachineIdField.selectAll()
+                                        aboutMachineIdField.copy()
+                                    }
+                                }
+
+                            }
+
+                            Button {
+                                text: qsTr("Register")
+                                highlighted: true
+                                onClicked: {
+                                    root.openRegister()
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 1
+                            color: Theme.borderColor
+                        }
+
                         RowLayout {
                             Layout.fillWidth: true
                             spacing: 12
@@ -748,6 +965,26 @@ Rectangle {
                             }
 
                             Item { Layout.fillWidth: true }
+                        }
+
+                        // 未注册状态（重新注册后显示）
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 8
+                            visible: !registeredState && authService && !authService.isTrialMode()
+
+                            Label {
+                                text: qsTr("Not Registered")
+                                font.pixelSize: 14
+                                font.bold: true
+                                color: "#e53935"
+                            }
+
+                            Button {
+                                text: qsTr("Register")
+                                highlighted: true
+                                onClicked: root.openRegister()
+                            }
                         }
                     }
 
@@ -849,6 +1086,39 @@ Rectangle {
             color: Theme.surfaceColor
             radius: 8
             border.color: Theme.borderColor
+        }
+    }
+
+    // 重新注册确认弹窗（放在根级别，避免 Layout 绑定循环）
+    Dialog {
+        id: reRegisterDialog
+        title: qsTr("Confirm Re-registration")
+        modal: true
+        implicitWidth: 360
+        x: (parent.width - width) / 2
+        y: (parent.height - height) / 2
+
+        contentItem: Label {
+            text: qsTr("Clear registration data and return to unregistered state?")
+            color: Theme.textColor
+            wrapMode: Text.WordWrap
+        }
+
+        footer: DialogButtonBox {
+            Button {
+                text: qsTr("Cancel")
+                DialogButtonBox.buttonRole: DialogButtonBox.RejectRole
+            }
+            Button {
+                text: qsTr("Confirm")
+                palette.buttonText: "#e53935"
+                DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
+            }
+        }
+        onAccepted: {
+            if (authService) {
+                authService.clearRegistration()
+            }
         }
     }
 }

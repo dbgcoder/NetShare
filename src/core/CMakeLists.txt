@@ -60,6 +60,22 @@ set(NETSHARE_CORE_CHAT_HEADERS
     chat/ChatService.h
 )
 
+set(NETSHARE_CORE_AUTH_SOURCES
+    auth/MachineFingerprint.cpp
+    auth/RegistrationKey.cpp
+    auth/AntiDebug.cpp
+    auth/EmailService.cpp
+    auth/AuthService.cpp
+)
+
+set(NETSHARE_CORE_AUTH_HEADERS
+    auth/MachineFingerprint.h
+    auth/RegistrationKey.h
+    auth/AntiDebug.h
+    auth/EmailService.h
+    auth/AuthService.h
+)
+
 add_library(NetshareCore STATIC
     ${NETSHARE_CORE_SOURCES}
     ${NETSHARE_CORE_HEADERS}
@@ -71,6 +87,8 @@ add_library(NetshareCore STATIC
     ${NETSHARE_CORE_NOTIFICATION_HEADERS}
     ${NETSHARE_CORE_CHAT_SOURCES}
     ${NETSHARE_CORE_CHAT_HEADERS}
+    ${NETSHARE_CORE_AUTH_SOURCES}
+    ${NETSHARE_CORE_AUTH_HEADERS}
 )
 
 set_target_properties(NetshareCore PROPERTIES
@@ -86,6 +104,7 @@ target_include_directories(NetshareCore PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/transfer
     ${CMAKE_CURRENT_SOURCE_DIR}/notification
     ${CMAKE_CURRENT_SOURCE_DIR}/chat
+    ${CMAKE_CURRENT_SOURCE_DIR}/auth
     ${CMAKE_CURRENT_SOURCE_DIR}/../database
     ${CMAKE_CURRENT_SOURCE_DIR}/../network
     ${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/civetweb_src/include
@@ -106,3 +125,13 @@ target_link_libraries(NetshareCore PUBLIC
 set_target_properties(NetshareCore PROPERTIES
     OUTPUT_NAME "NetshareCore"
 )
+
+if(WIN32)
+    target_link_libraries(NetshareCore PUBLIC
+        bcrypt
+        ole32
+        oleaut32
+        wbemuuid
+        iphlpapi
+    )
+endif()

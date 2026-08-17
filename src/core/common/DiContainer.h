@@ -19,6 +19,9 @@
 #include "network/CivetWebServer.h"
 #include "network/mDNSService.h"
 #include "core/notification/NotificationManager.h"
+#include "core/auth/AuthService.h"
+#include "core/auth/MachineFingerprint.h"
+#include "core/auth/EmailService.h"
 
 namespace di = boost::di;
 
@@ -72,6 +75,18 @@ inline auto InfraModule(
     );
 }
 
+inline auto AuthModule(
+    AuthService& authSvc,
+    MachineFingerprint& fingerprint,
+    EmailService& emailSvc)
+{
+    return di::make_injector(
+        di::bind<AuthService>.to(std::ref(authSvc)),
+        di::bind<MachineFingerprint>.to(std::ref(fingerprint)),
+        di::bind<EmailService>.to(std::ref(emailSvc))
+    );
+}
+
 using NetShareInjector = decltype(di::make_injector(
     std::declval<decltype(CoreModule(
         std::declval<IShareManager&>(),
@@ -89,7 +104,11 @@ using NetShareInjector = decltype(di::make_injector(
     std::declval<decltype(InfraModule(
         std::declval<DatabaseManager&>(),
         std::declval<SettingsManager&>(),
-        std::declval<TransferLogService&>()))>()
+        std::declval<TransferLogService&>()))>(),
+    std::declval<decltype(AuthModule(
+        std::declval<AuthService&>(),
+        std::declval<MachineFingerprint&>(),
+        std::declval<EmailService&>()))>()
 ));
 
 #endif

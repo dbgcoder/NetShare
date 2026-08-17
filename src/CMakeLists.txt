@@ -44,4 +44,13 @@ if(WIN32)
         RC_FILE "${CMAKE_CURRENT_SOURCE_DIR}/gui/netshare.rc"
     )
     target_link_libraries(NetShare PRIVATE dwmapi)
+
+    # Release 构建后自动计算 EXE 哈希用于 PE 完整性校验
+    if(CMAKE_BUILD_TYPE STREQUAL "Release")
+        add_custom_command(TARGET NetShare POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E echo "Computing PE hash for integrity verification"
+            COMMAND powershell -Command "Get-FileHash -Path '$<TARGET_FILE:NetShare>' -Algorithm SHA256 | Select-Object -ExpandProperty Hash | Out-File -FilePath '$<TARGET_FILE:NetShare>.pe_hash.txt' -Encoding utf8 -NoNewline"
+            COMMENT "Computing PE hash for integrity verification"
+        )
+    endif()
 endif()

@@ -1,0 +1,271 @@
+---
+description: 创建或重命名文件、类、函数、变量、QML 组件、属性、信号时使用；规定命名规范
+globs:
+  - "**/*.cpp"
+  - "**/*.h"
+  - "**/*.hpp"
+  - "**/*.qml"
+alwaysApply: false
+---
+
+# 创建规则：命名规范
+
+## 1. 使用时机
+
+当需要创建、移动、重命名以下内容时，必须使用本规则：
+
+- C++ 文件；
+- C++ 类；
+- C++ 函数；
+- C++ 成员变量；
+- C++ 常量；
+- C++ 信号；
+- C++ 槽函数；
+- C++ 枚举；
+- QML 文件；
+- QML 页面；
+- QML 组件；
+- QML `id`；
+- QML 属性；
+- QML 信号；
+- 测试文件；
+- 目录名。
+
+目标：让 AI 在创建内容前先判断“应该叫什么名字”。
+
+---
+
+## 2. 文件命名规则
+
+### 2.1 C++ 文件
+
+C++ 类、头文件、源文件使用大驼峰，文件名必须与主类名一致。
+
+正确：
+
+```text
+UserModel.h
+UserModel.cpp
+VideoThumbnailGenerator.h
+VideoThumbnailGenerator.cpp
+DownloadService.h
+DownloadService.cpp
+```
+
+错误：
+
+```text
+user_model.cpp
+myclass.cpp
+aaa.cpp
+new_file.cpp
+```
+
+### 2.2 QML 文件
+
+QML 文件使用大驼峰，名称必须表达组件用途。
+
+正确：
+
+```text
+HomePage.qml
+SettingsPage.qml
+VideoCard.qml
+RoundButton.qml
+AppTheme.qml
+```
+
+错误：
+
+```text
+home.qml
+test.qml
+page1.qml
+新建文件.qml
+```
+
+### 2.3 目录命名
+
+目录使用小写字母，多个单词使用下划线。
+
+正确：
+
+```text
+core/
+data_models/
+video_processing/
+image_cache/
+```
+
+项目固定目录除外：
+
+```text
+3rdparty/
+resources/
+translations/
+```
+
+### 2.4 测试文件
+
+测试文件使用：
+
+```text
+test_<被测对象名>.cpp
+```
+
+示例：
+
+```text
+test_video_list_model.cpp
+test_download_service.cpp
+test_thumbnail_generator.cpp
+```
+
+---
+
+## 3. C++ 代码命名规则
+
+### 3.1 类名
+
+使用大驼峰。
+
+```cpp
+class VideoListModel;
+class DownloadService;
+class ThumbnailGenerator;
+```
+
+### 3.2 函数名
+
+使用小驼峰，动词开头，表达动作。
+
+```cpp
+loadNextPage()
+generateThumbnail()
+cancelTask()
+saveSettings()
+```
+
+### 3.3 成员变量
+
+使用 `m_` 前缀 + 小驼峰。
+
+```cpp
+m_userName
+m_isLoading
+m_cacheManager
+m_taskQueue
+```
+
+### 3.4 常量
+
+使用语义明确的命名。
+
+```cpp
+constexpr int MaxCacheSize = 500;
+constexpr int ThumbnailWidth = 320;
+```
+
+### 3.5 信号
+
+信号名称应描述状态变化或事件结果。
+
+```cpp
+loadingChanged()
+thumbnailReady()
+errorOccurred()
+taskFinished()
+```
+
+### 3.6 槽函数
+
+槽函数可以使用 `on` 前缀。
+
+```cpp
+onLoadFinished()
+onTaskCanceled()
+onSettingsChanged()
+```
+
+### 3.7 枚举
+
+枚举类型使用大驼峰，枚举值使用清晰语义。
+
+```cpp
+enum class TaskStatus {
+    Pending,
+    Running,
+    Finished,
+    Failed
+};
+```
+
+---
+
+## 4. QML 命名规则
+
+### 4.1 id
+
+QML `id` 使用小驼峰。
+
+```qml
+id: videoListView
+id: confirmButton
+id: settingsPanel
+```
+
+### 4.2 property
+
+QML 属性使用小驼峰。
+
+```qml
+property color textColor
+property int itemSpacing
+property bool selected
+```
+
+### 4.3 signal
+
+QML 信号使用描述性命名。
+
+```qml
+signal itemSelected(int index)
+signal closeRequested()
+signal loginSucceeded()
+```
+
+---
+
+## 5. AI 创建前命名检查清单
+
+创建任何文件、类、函数、变量、组件前，必须先判断：
+
+1. 文件名是否与主类名一致？
+2. C++ 类名是否使用大驼峰？
+3. C++ 函数名是否使用小驼峰并以动词开头？
+4. C++ 成员变量是否使用 `m_` 前缀 + 小驼峰？
+5. QML 文件名是否使用大驼峰并表达组件用途？
+6. QML `id`、属性、信号是否语义清晰？
+7. 测试文件是否使用 `test_<被测对象名>.cpp`？
+8. 是否出现无意义命名？
+
+---
+
+## 6. 强制禁止
+
+禁止创建以下类型的文件名：
+
+```text
+aaa.cpp
+bbb.h
+test.qml
+demo.cpp
+new_file.cpp
+新建文件.qml
+myclass.cpp
+temp.cpp
+```
+
+禁止使用无意义命名。
+
+禁止文件名与主类名不一致。

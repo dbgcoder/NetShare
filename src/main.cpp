@@ -8,6 +8,7 @@
 #include <QAction>
 #include <QIcon>
 #include <QWindow>
+#include <QScreen>
 #include <QQuickWindow>
 #include <QQmlContext>
 #include <QQuickStyle>
@@ -39,6 +40,11 @@
 #include "core/transfer/TransferLogService.h"
 #include "core/notification/NotificationManager.h"
 #include "core/chat/ChatService.h"
+#include "core/auth/MachineFingerprint.h"
+#include "core/auth/RegistrationKey.h"
+#include "core/auth/AntiDebug.h"
+#include "core/auth/EmailService.h"
+#include "core/auth/AuthService.h"
 #include "database/DatabaseManager.h"
 #include "network/CivetWebServer.h"
 #include "network/mDNSService.h"
@@ -129,14 +135,17 @@ public:
             return false;
         }
 
-        if (!initializeNetworkServer()) {
-            LOG_ERROR("Failed to initialize network server");
+        // Auth initialization must happen before QML (registration popup needs auth service)
+        if (!initializeAuth()) {
+            LOG_ERROR("Failed to initialize auth service");
             return false;
         }
 
+        // Network server startup is delayed until registration is completed
+        // (see onRegistrationCompleted slot)
+
         if (!initializeTrayIcon()) {
-            LOG_ERROR("Failed to initialize system tray");
-            return false;
+            LOG_WARN("System tray not available, continuing without tray icon");
         }
 
         m_notificationManager = new NotificationManager(m_trayIcon, this);
@@ -323,8 +332,50 @@ private:
         return true;
     }
 
+    bool initializeAuth()
+    {
+        m_fingerprint = new MachineFingerprint(this);
+        m_emailService = new EmailService(this);
+        m_authService = new AuthService(m_database, m_fingerprint, m_emailService, this);
+
+        // Connect registration completed signal to start network server
+        connect(m_authService, &AuthService::registrationCompleted,
+                this, &NetShareApplication::onRegistrationCompleted);
+
+        // Update QML properties when registration is cleared
+        connect(m_authService, &AuthService::registrationCleared,
+                this, [this]() {
+            if (m_mainWindow) {
+                m_mainWindow->setProperty("isRegistered", m_authService->isRegistered());
+                m_mainWindow->setProperty("isTrialMode", m_authService->isTrialMode());
+            }
+        });
+
+        LOG_INFO("AuthService initialized (registered=%d, trial=%d)",
+                 m_authService->isRegistered(), m_authService->isTrialMode());
+
+        // If already registered or in trial mode, start network server immediately
+        if (m_authService->isRegistered() || m_authService->isTrialMode()) {
+            // Generate security token for existing users before starting network
+            m_authService->generateSecurityToken();
+
+            if (!initializeNetworkServer()) {
+                LOG_ERROR("Failed to start network server");
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     bool initializeNetworkServer()
     {
+        // 安全检查：securityToken 无效则拒绝启动网络服务
+        if (m_authService && !m_authService->hasValidSecurityToken()) {
+            LOG_ERROR("Security token invalid, network service startup denied");
+            return false;
+        }
+
         m_civetServer = new CivetWebServer(this);
 
         auto* requestHandler = new RequestHandler(m_shareManager, m_fileBrowser, m_folderPacker, this);
@@ -520,6 +571,8 @@ private:
         m_engine->rootContext()->setContextProperty("mdnsService", m_mdnsService);
         m_engine->rootContext()->setContextProperty("webSocketHandler", m_civetServer);
         m_engine->rootContext()->setContextProperty("chatService", m_chatService);
+        m_engine->rootContext()->setContextProperty("authService", m_authService);
+        m_engine->rootContext()->setContextProperty("machineFingerprint", m_fingerprint);
 
         auto* qrCodeHelper = new QRCodeHelper(this);
         m_engine->rootContext()->setContextProperty("qrCodeHelper", qrCodeHelper);
@@ -577,21 +630,24 @@ private:
             m_mainWindow = quickWin;
         }
 
-#ifdef Q_OS_WIN
-        // Enable dark title bar on Windows 10 1809+ (for taskbar & alt-tab)
-        HWND hwnd = (HWND)m_mainWindow->winId();
-        BOOL darkMode = TRUE;
-        DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &darkMode, sizeof(darkMode));
-
-        MARGINS margins = { -1, -1, -1, -1 };
-        DwmExtendFrameIntoClientArea(hwnd, &margins);
-#endif
-
-        // Start hidden to tray when MinimizeToTray is enabled
+// Start hidden to tray when MinimizeToTray is enabled AND user is registered
         auto* settingsSvc = m_settings;
         bool minimizeToTray = settingsSvc ? settingsSvc->value("General/MinimizeToTray", true).toBool() : true;
-        if (!minimizeToTray) {
+        bool isRegistered = m_authService && m_authService->isRegistered();
+        if (!minimizeToTray || !isRegistered) {
             m_mainWindow->show();
+            // Fit frameless window within available screen area
+            QScreen* screen = QGuiApplication::primaryScreen();
+            if (screen) {
+                QRect avail = screen->availableGeometry();
+                int w = 1024 > avail.width() ? avail.width() : 1024;
+                int h = 768 > avail.height() ? avail.height() : 768;
+                m_mainWindow->resize(w, h);
+                m_mainWindow->setPosition(
+                    avail.x() + (avail.width() - w) / 2,
+                    avail.y() + (avail.height() - h) / 2
+                );
+            }
         }
 
         connect(m_mainWindow, &QWindow::visibleChanged,
@@ -730,6 +786,18 @@ private slots:
     {
         if (m_mainWindow) {
             m_mainWindow->show();
+            // Fit frameless window within available screen area
+            QScreen* screen = QGuiApplication::primaryScreen();
+            if (screen) {
+                QRect avail = screen->availableGeometry();
+                int w = 1024 > avail.width() ? avail.width() : 1024;
+                int h = 768 > avail.height() ? avail.height() : 768;
+                m_mainWindow->resize(w, h);
+                m_mainWindow->setPosition(
+                    avail.x() + (avail.width() - w) / 2,
+                    avail.y() + (avail.height() - h) / 2
+                );
+            }
             m_mainWindow->raise();
             m_mainWindow->requestActivate();
             LOG_DEBUG("Main window shown");
@@ -760,6 +828,20 @@ private slots:
         QCoreApplication::quit();
     }
 
+    void onRegistrationCompleted()
+    {
+        if (m_mainWindow) {
+            m_mainWindow->setProperty("isRegistered", m_authService->isRegistered());
+            m_mainWindow->setProperty("isTrialMode", m_authService->isTrialMode());
+        }
+        if (!m_civetServer) {
+            LOG_INFO("Registration completed, starting network server...");
+            if (!initializeNetworkServer()) {
+                LOG_ERROR("Failed to start network server after registration");
+            }
+        }
+    }
+
 private:
     std::unique_ptr<NetShareInjector> m_injector;
 
@@ -783,6 +865,11 @@ private:
     QTranslator*          m_qtTranslator     = nullptr;
     QWindow*              m_mainWindow       = nullptr;
 
+    // Auth service members
+    MachineFingerprint*   m_fingerprint      = nullptr;
+    EmailService*         m_emailService     = nullptr;
+    AuthService*          m_authService      = nullptr;
+
     void buildInjector()
     {
         m_injector = std::make_unique<NetShareInjector>(
@@ -790,7 +877,8 @@ private:
                 CoreModule(*m_shareManager, *m_fileBrowser, *m_folderPacker),
                 TransferModule(*m_transferEngine, *m_chunkManager, *m_chunkStateManager, *m_bandwidthManager),
                 NetworkModule(*m_civetServer, *m_mdnsService, *m_notificationManager),
-                InfraModule(*m_database, *m_settings, *m_transferLog)
+                InfraModule(*m_database, *m_settings, *m_transferLog),
+                AuthModule(*m_authService, *m_fingerprint, *m_emailService)
             )
         );
         LOG_INFO("Boost.DI injector built successfully");
