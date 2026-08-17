@@ -3,6 +3,10 @@ build/
 cmake-build-*/
 out/
 
+# Root files to exclude
+README.md
+LICENSE
+
 # Build artifacts
 *.log
 *.err
