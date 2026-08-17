@@ -1,0 +1,62 @@
+# Build directories
+build/
+cmake-build-*/
+out/
+
+# Build artifacts
+*.log
+*.err
+*.txt
+!CMakeLists.txt
+
+# IDE files
+.vs/
+.vscode/
+*.user
+*.pro.user
+CMakeSettings.json
+.cache/
+
+# Compiled objects
+*.obj
+*.o
+*.lib
+*.a
+*.so
+*.dll
+*.exe
+
+# Qt generated
+moc_*
+ui_*
+qrc_*
+*.qm
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# CMake cache
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+compile_commands.json
+
+# Ninja
+*.ninja
+build.ninja
+
+# Qt autogen
+*_autogen/
+
+# Distribution
+dist/
+
+# Database
+*.db
+
+# Logs
+logs/
+
+# Qt Creator user data
+.qtcreator/

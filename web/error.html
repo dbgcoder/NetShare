@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NetShare</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background: #0f0f23; color: #eee;
+            min-height: 100vh; display: flex; align-items: center; justify-content: center;
+        }
+        .container { max-width: 400px; width: 100%; padding: 20px; }
+        .card {
+            background: #16213e; border-radius: 16px; padding: 40px; text-align: center;
+        }
+        .icon { font-size: 48px; margin-bottom: 16px; }
+        h1 { font-size: 20px; margin: 0 0 8px; }
+        .desc { color: #888; margin: 0 0 24px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <div class="icon">😕</div>
+            <h1 data-i18n="error_share_not_exist">分享不存在</h1>
+            <p class="desc" data-i18n="error_share_invalid">此分享链接无效或已过期</p>
+        </div>
+    </div>
+    <script src="common.js"></script>
+    <script>applyI18n();</script>
+</body>
+</html>

@@ -1,0 +1,907 @@
+import QtQuick
+import QtQuick.Controls
+import QtQuick.Layouts
+import QtQuick.Window
+import QtQuick.Dialogs
+import NetShare
+
+Rectangle {
+    id: root
+    color: Theme.backgroundColor
+
+    property int currentIndex: 0
+    property string copiedText: ""
+    property bool shareIsFolder: false
+
+    onCurrentIndexChanged: refreshShares()
+
+    Component.onCompleted: {
+        if (typeof shareManager !== 'undefined') {
+            refreshShares()
+        }
+    }
+
+    Connections {
+        target: typeof shareManager !== 'undefined' ? shareManager : null
+        enabled: typeof shareManager !== 'undefined'
+        function onShareCreated(token) {
+            refreshShares()
+        }
+        function onShareCancelled(token) {
+            refreshShares()
+        }
+        function onShareExpired(token) {
+            refreshShares()
+        }
+    }
+
+    function refreshShares() {
+        if (typeof shareManager === 'undefined') return
+        shareListModel.clear()
+        var shares = shareManager.getAllShares()
+        for (var i = 0; i < shares.length; i++) {
+            var share = shares[i]
+            var isExpired = share.isExpired()
+            // Filter by currentIndex: 0=all, 1=active, 2=expired
+            if (currentIndex === 1 && isExpired) continue
+            if (currentIndex === 2 && !isExpired) continue
+            var fileName = share.filePath.split("/").pop().split("\\").pop()
+            var fileSize = formatFileSize(share.fileSize)
+            var expireTime = getExpireTime(share.expiresAt)
+            shareListModel.append({
+                fileName: fileName,
+                fileSize: fileSize,
+                expireTime: expireTime,
+                status: isExpired ? qsTr("Expired") : qsTr("Active"),
+                statusColor: isExpired ? Theme.errorColor : Theme.successColor,
+                visitCount: share.downloadCount,
+                shareUrl: "http://" + shareManager.localIp + ":8080/s/" + share.token,
+                token: share.token,
+                filePath: share.filePath,
+                isFolder: share.isFolder,
+                passwordRequired: share.passwordRequired,
+                maxDownloads: share.maxDownloads,
+                downloadCount: share.downloadCount,
+                expiresAt: share.expiresAt.toString()
+            })
+        }
+        shareCountLabel.text = qsTr("Total %1 shares").arg(shareListModel.count)
+    }
+
+    function formatFileSize(bytes) {
+        if (bytes < 1024) return bytes + " B"
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB"
+        if (bytes < 1024 * 1024 * 1024) return (bytes / 1024 / 1024).toFixed(1) + " MB"
+        return (bytes / 1024 / 1024 / 1024).toFixed(1) + " GB"
+    }
+
+    function getExpireTime(expiresAt) {
+        if (!expiresAt || expiresAt === "" || expiresAt === undefined)
+            return qsTr("Never expires")
+        var now = new Date()
+        var expire = new Date(expiresAt)
+        if (isNaN(expire.getTime()))
+            return qsTr("Never expires")
+        var diff = expire - now
+        if (diff <= 0) return qsTr("Expired")
+        var hours = Math.floor(diff / 3600000)
+        if (hours < 24) return qsTr("%1 hours left").arg(hours)
+        var days = Math.floor(hours / 24)
+        return qsTr("%1 days left").arg(days)
+    }
+
+    function copyToClipboard(text) {
+        if (typeof shareManager !== 'undefined') {
+            shareManager.copyToClipboard(text)
+        }
+        copiedText = text
+        copyToast.show()
+    }
+
+    ColumnLayout {
+        anchors.fill: parent
+        anchors.margins: 20
+        spacing: 16
+
+        RowLayout {
+            Layout.fillWidth: true
+
+            Label {
+                text: qsTr("Share Management")
+                font.pixelSize: 24
+                font.bold: true
+                color: Theme.textColor
+            }
+
+            Item { Layout.fillWidth: true }
+
+            Button {
+                text: qsTr("New Share")
+                contentItem: Label {
+                    text: parent.text
+                    color: Theme.textOnAccentColor
+                    horizontalAlignment: Text.AlignHCenter
+                }
+                background: Rectangle {
+                    color: Theme.accentColor
+                    radius: 4
+                }
+                onClicked: shareDialog.open()
+            }
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 8
+
+            Repeater {
+                model: [qsTr("All"), qsTr("Active"), qsTr("Expired")]
+                delegate: Rectangle {
+                    property bool isSelected: currentIndex === index
+                    Layout.preferredHeight: 32
+                    Layout.minimumWidth: 80
+                    color: isSelected ? Theme.accentColor : Theme.surfaceColor
+                    radius: 4
+
+                    Label {
+                        anchors.centerIn: parent
+                        text: modelData
+                        color: isSelected ? Theme.textOnAccentColor : Theme.textColor
+                        font.pixelSize: 13
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: currentIndex = index
+                    }
+                }
+            }
+
+            Item { Layout.fillWidth: true }
+
+            Label {
+                id: shareCountLabel
+                text: qsTr("Total 0 shares")
+                color: Theme.textSecondary
+                font.pixelSize: 13
+            }
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            color: Theme.surfaceColor
+            radius: 8
+
+            ListView {
+                id: shareListView
+                anchors.fill: parent
+                anchors.margins: 8
+                clip: true
+
+                model: ListModel {
+                    id: shareListModel
+                }
+
+                ScrollBar.vertical: ScrollBar {
+                    id: shareListScrollBar
+                    contentItem: Rectangle {
+                        implicitWidth: 6
+                        implicitHeight: 100
+                        radius: 3
+                        color: shareListScrollBar.active ? Theme.accentColor : Theme.borderColor
+                        opacity: shareListScrollBar.active ? 1.0 : 0.5
+                    }
+                }
+
+                Label {
+                    anchors.centerIn: parent
+                    text: qsTr("No shares yet\nClick \"New Share\" to start")
+                    color: Theme.textSecondary
+                    font.pixelSize: 16
+                    horizontalAlignment: Text.AlignHCenter
+                    visible: shareListModel.count === 0
+                }
+
+                delegate: shareListDelegate
+            }
+        }
+    }
+
+    Component {
+        id: shareListDelegate
+        Rectangle {
+            width: parent ? parent.width - 16 : 0
+            height: 80
+            color: mouseArea.containsMouse ? Theme.itemHoverColor : Theme.sidebarColor
+            radius: 4
+
+            MouseArea {
+                id: mouseArea
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
+                    detailDialog.fileName = model.fileName
+                    detailDialog.fileSize = model.fileSize
+                    detailDialog.filePath = model.filePath
+                    detailDialog.shareUrl = model.shareUrl
+                    detailDialog.token = model.token
+                    detailDialog.expireTime = model.expireTime
+                    detailDialog.status = model.status
+                    detailDialog.statusColor = model.statusColor
+                    detailDialog.visitCount = model.visitCount
+                    detailDialog.isFolder = model.isFolder
+                    detailDialog.passwordRequired = model.passwordRequired
+                    detailDialog.maxDownloads = model.maxDownloads
+                    detailDialog.downloadCount = model.downloadCount
+                    detailDialog.expiresAt = model.expiresAt
+                    detailDialog.open()
+                }
+            }
+
+            RowLayout {
+                anchors.fill: parent
+                anchors.margins: 12
+
+                Rectangle {
+                    width: 48
+                    height: 48
+                    color: Theme.accentColor
+                    radius: 4
+
+                    Label {
+                        anchors.centerIn: parent
+                        text: model.isFolder ? "📁" : "📄"
+                        font.pixelSize: 24
+                    }
+                }
+
+                ColumnLayout {
+                    Layout.leftMargin: 12
+                    Layout.fillWidth: true
+
+                    Label {
+                        text: model.fileName
+                        color: Theme.textColor
+                        font.pixelSize: 14
+                        font.bold: true
+                        elide: Text.ElideRight
+                        Layout.fillWidth: true
+                    }
+
+                    Label {
+                        text: model.fileSize + " • " + model.expireTime
+                        color: Theme.textSecondary
+                        font.pixelSize: 12
+                    }
+
+                    Label {
+                        text: model.status
+                        color: model.statusColor
+                        font.pixelSize: 12
+                    }
+                }
+
+                ColumnLayout {
+                    spacing: 8
+
+                    Label {
+                        text: qsTr("Visits: %1").arg(model.visitCount)
+                        color: Theme.textSecondary
+                        font.pixelSize: 11
+                    }
+
+                    RowLayout {
+                        spacing: 4
+
+                        Button {
+                            implicitWidth: 32
+                            implicitHeight: 32
+                            contentItem: Label {
+                                text: "📋"
+                                horizontalAlignment: Text.AlignHCenter
+                                font.pixelSize: 16
+                            }
+                            background: Rectangle {
+                                color: parent.hovered ? Theme.hoverColor : "transparent"
+                                radius: 4
+                            }
+                            ToolTip.text: qsTr("Copy Link")
+                            ToolTip.visible: hovered
+                            onClicked: copyToClipboard(model.shareUrl)
+                        }
+
+                        Button {
+                            implicitWidth: 32
+                            implicitHeight: 32
+                            contentItem: Label {
+                                text: "📱"
+                                horizontalAlignment: Text.AlignHCenter
+                                font.pixelSize: 16
+                            }
+                            background: Rectangle {
+                                color: parent.hovered ? Theme.hoverColor : "transparent"
+                                radius: 4
+                            }
+                            ToolTip.text: qsTr("QR Code")
+                            ToolTip.visible: hovered
+                            onClicked: {
+                                qrCodeText.text = model.shareUrl
+                                qrCodeImage.source = qrCodeHelper.generateDataUrl(model.shareUrl, 600)
+                                qrCodeDialog.open()
+                            }
+                        }
+
+                        Button {
+                            implicitWidth: 32
+                            implicitHeight: 32
+                            contentItem: Label {
+                                text: "❌"
+                                horizontalAlignment: Text.AlignHCenter
+                                font.pixelSize: 16
+                            }
+                            background: Rectangle {
+                                color: parent.hovered ? Theme.hoverColor : "transparent"
+                                radius: 4
+                            }
+                            ToolTip.text: qsTr("Cancel Share")
+                            ToolTip.visible: hovered
+                            onClicked: {
+                                shareManager.cancelShare(model.token)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Dialog {
+        id: detailDialog
+
+        property string fileName: ""
+        property string fileSize: ""
+        property string filePath: ""
+        property string shareUrl: ""
+        property string token: ""
+        property string expireTime: ""
+        property string status: ""
+        property color statusColor: Theme.successColor
+        property int visitCount: 0
+        property bool isFolder: false
+        property bool passwordRequired: false
+        property int maxDownloads: 0
+        property int downloadCount: 0
+        property string expiresAt: ""
+
+        title: qsTr("Share Details")
+        modal: true
+        width: 480
+        height: 420
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        standardButtons: Dialog.Close
+
+        background: Rectangle {
+            color: Theme.surfaceColor
+            radius: 8
+            border.color: Theme.borderColor
+        }
+
+        contentItem: Item {
+            ColumnLayout {
+                anchors.fill: parent
+                spacing: 12
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 60
+                    color: Theme.sidebarColor
+                    radius: 4
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.margins: 12
+
+                        Rectangle {
+                            width: 40
+                            height: 40
+                            color: Theme.accentColor
+                            radius: 4
+
+                            Label {
+                                anchors.centerIn: parent
+                                text: detailDialog.isFolder ? "📁" : "📄"
+                                font.pixelSize: 20
+                            }
+                        }
+
+                        ColumnLayout {
+                            Layout.leftMargin: 8
+
+                            Label {
+                                text: detailDialog.fileName
+                                color: Theme.textColor
+                                font.pixelSize: 16
+                                font.bold: true
+                                elide: Text.ElideRight
+                                Layout.fillWidth: true
+                            }
+
+                            Label {
+                                text: detailDialog.fileSize + (detailDialog.isFolder ? qsTr(" (Folder)") : "")
+                                color: Theme.textSecondary
+                                font.pixelSize: 12
+                            }
+                        }
+
+                        Rectangle {
+                            Layout.preferredHeight: 24
+                            Layout.preferredWidth: 60
+                            color: detailDialog.statusColor
+                            radius: 12
+
+                            Label {
+                                anchors.centerIn: parent
+                                text: detailDialog.status
+                                color: Theme.textOnAccentColor
+                                font.pixelSize: 11
+                            }
+                        }
+                    }
+                }
+
+                GridLayout {
+                    Layout.fillWidth: true
+                    columns: 2
+                    rowSpacing: 8
+                    columnSpacing: 12
+
+                    Label {
+                        text: qsTr("Share Path")
+                        color: Theme.textSecondary
+                        font.pixelSize: 13
+                    }
+                    Label {
+                        text: detailDialog.filePath
+                        color: Theme.textColor
+                        font.pixelSize: 13
+                        elide: Text.ElideMiddle
+                        Layout.fillWidth: true
+                    }
+
+                    Label {
+                        text: qsTr("Expire Time")
+                        color: Theme.textSecondary
+                        font.pixelSize: 13
+                    }
+                    Label {
+                        text: detailDialog.expiresAt
+                        color: Theme.textColor
+                        font.pixelSize: 13
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                    }
+
+                    Label {
+                        text: qsTr("Visit Count")
+                        color: Theme.textSecondary
+                        font.pixelSize: 13
+                    }
+                    Label {
+                        text: detailDialog.downloadCount + qsTr(" times")
+                        color: Theme.textColor
+                        font.pixelSize: 13
+                    }
+
+                    Label {
+                        text: qsTr("Download Limit")
+                        color: Theme.textSecondary
+                        font.pixelSize: 13
+                    }
+                    Label {
+                        text: detailDialog.maxDownloads > 0 ? detailDialog.maxDownloads + qsTr(" times") : qsTr("Unlimited")
+                        color: Theme.textColor
+                        font.pixelSize: 13
+                    }
+
+                    Label {
+                        text: qsTr("Access Password")
+                        color: Theme.textSecondary
+                        font.pixelSize: 13
+                    }
+                    Label {
+                        text: detailDialog.passwordRequired ? qsTr("Set") : qsTr("None")
+                        color: detailDialog.passwordRequired ? Theme.warningColor : Theme.textColor
+                        font.pixelSize: 13
+                    }
+
+                    Label {
+                        text: qsTr("Share Token")
+                        color: Theme.textSecondary
+                        font.pixelSize: 13
+                    }
+                    Label {
+                        text: detailDialog.token
+                        color: Theme.textColor
+                        font.pixelSize: 13
+                        font.family: "Consolas"
+                    }
+                }
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 1
+                    color: Theme.borderColor
+                }
+
+                Label {
+                    text: qsTr("Share Link")
+                    color: Theme.textSecondary
+                    font.pixelSize: 13
+                }
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 36
+                    color: Theme.backgroundColor
+                    radius: 4
+
+                    Label {
+                        anchors.fill: parent
+                        anchors.leftMargin: 8
+                        anchors.rightMargin: 70
+                        text: detailDialog.shareUrl
+                        color: Theme.accentColor
+                        font.pixelSize: 13
+                        font.family: "Consolas"
+                        verticalAlignment: Text.AlignVCenter
+                        elide: Text.ElideMiddle
+                    }
+
+                    RowLayout {
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.rightMargin: 4
+                        spacing: 4
+
+                        Button {
+                            implicitHeight: 28
+                            implicitWidth: 28
+                            contentItem: Label {
+                                text: "📋"
+                                horizontalAlignment: Text.AlignHCenter
+                                font.pixelSize: 14
+                            }
+                            background: Rectangle {
+                                color: parent.hovered ? Theme.hoverColor : "transparent"
+                                radius: 4
+                            }
+                            ToolTip.text: qsTr("Copy Link")
+                            ToolTip.visible: hovered
+                            onClicked: copyToClipboard(detailDialog.shareUrl)
+                        }
+
+                        Button {
+                            implicitHeight: 28
+                            implicitWidth: 28
+                            contentItem: Label {
+                                text: "📱"
+                                horizontalAlignment: Text.AlignHCenter
+                                font.pixelSize: 14
+                            }
+                            background: Rectangle {
+                                color: parent.hovered ? Theme.hoverColor : "transparent"
+                                radius: 4
+                            }
+                            ToolTip.text: qsTr("QR Code")
+                            ToolTip.visible: hovered
+                            onClicked: {
+                                qrCodeText.text = detailDialog.shareUrl
+                                qrCodeImage.source = qrCodeHelper.generateDataUrl(detailDialog.shareUrl, 600)
+                                qrCodeDialog.open()
+                            }
+                        }
+                    }
+                }
+
+                Item { Layout.fillHeight: true }
+            }
+        }
+    }
+
+    Dialog {
+        id: shareDialog
+        modal: true
+        width: 450
+        height: 320
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        closePolicy: Popup.NoAutoClose
+
+        background: Rectangle {
+            color: Theme.surfaceColor
+            radius: 8
+            border.color: Theme.borderColor
+        }
+
+        contentItem: ColumnLayout {
+            spacing: 0
+
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 40
+                color: Theme.sidebarColor
+                radius: 8
+                clip: true
+
+                Label {
+                    anchors.left: parent.left
+                    anchors.leftMargin: 16
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: qsTr("New Share")
+                    color: Theme.textColor
+                    font.pixelSize: 16
+                    font.bold: true
+                }
+            }
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.margins: 16
+                spacing: 16
+
+                Label {
+                    text: qsTr("Select file or folder")
+                    color: Theme.textColor
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+
+                    TextField {
+                        id: filePathInput
+                        Layout.fillWidth: true
+                        placeholderText: qsTr("Please select file or folder")
+                        readOnly: true
+                        color: Theme.textColor
+                        placeholderTextColor: Theme.textSecondary
+                        selectionColor: Theme.accentColor
+                        selectedTextColor: Theme.textOnAccentColor
+                        background: Rectangle {
+                            color: Theme.backgroundColor
+                            radius: 4
+                            border.color: Theme.borderColor
+                        }
+                    }
+
+                    ThemedButton {
+                        text: qsTr("File")
+                        onClicked: fileDialog.open()
+                    }
+
+                    ThemedButton {
+                        text: qsTr("Folder")
+                        onClicked: folderDialog.open()
+                    }
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+
+                    Label { text: qsTr("Validity"); color: Theme.textColor }
+                    Item { Layout.fillWidth: true }
+                    ThemedComboBox {
+                        id: expireCombo
+                        model: [qsTr("24 hours"), qsTr("7 days"), qsTr("30 days"), qsTr("Never expires")]
+                        currentIndex: 0
+                    }
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+
+                    Label { text: qsTr("Access Password"); color: Theme.textColor }
+                    Item { Layout.fillWidth: true }
+                    TextField {
+                        id: passwordInput
+                        placeholderText: qsTr("Leave empty for no password")
+                        echoMode: TextInput.Password
+                        color: Theme.textColor
+                        placeholderTextColor: Theme.textSecondary
+                        selectionColor: Theme.accentColor
+                        selectedTextColor: Theme.textOnAccentColor
+                        background: Rectangle {
+                            color: Theme.backgroundColor
+                            radius: 4
+                            border.color: Theme.borderColor
+                        }
+                    }
+                }
+
+                Item { Layout.fillHeight: true }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+
+                    Item { Layout.fillWidth: true }
+
+                    ThemedButton {
+                        text: qsTr("OK")
+                        primary: true
+                        onClicked: {
+                            if (filePathInput.text.trim() !== "") {
+                                var expireHours = 24
+                                if (expireCombo.currentIndex === 1) expireHours = 168
+                                else if (expireCombo.currentIndex === 2) expireHours = 720
+                                else if (expireCombo.currentIndex === 3) expireHours = 0
+
+                                shareManager.createShare(
+                                    filePathInput.text.trim(),
+                                    shareIsFolder,
+                                    expireHours,
+                                    0,
+                                    passwordInput.text
+                                )
+
+                                filePathInput.text = ""
+                                passwordInput.text = ""
+                                expireCombo.currentIndex = 0
+                                shareIsFolder = false
+                                shareDialog.close()
+                            }
+                        }
+                    }
+
+                    ThemedButton {
+                        text: qsTr("Cancel")
+                        onClicked: shareDialog.close()
+                    }
+                }
+            }
+        }
+    }
+
+    FileDialog {
+        id: fileDialog
+        title: qsTr("Select File")
+        onAccepted: {
+            var path = selectedFile.toString()
+            if (path.startsWith("file:///")) {
+                path = path.substring(8)
+            }
+            filePathInput.text = path
+            shareIsFolder = false
+        }
+    }
+
+    FolderDialog {
+        id: folderDialog
+        title: qsTr("Select Folder")
+        onAccepted: {
+            var path = selectedFolder.toString()
+            if (path.startsWith("file:///")) {
+                path = path.substring(8)
+            }
+            filePathInput.text = path
+            shareIsFolder = true
+        }
+    }
+
+    Dialog {
+        id: qrCodeDialog
+        title: qsTr("Share QR Code")
+        standardButtons: Dialog.Close
+        modal: true
+        width: 340
+        height: 480
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+        background: Rectangle {
+            color: Theme.surfaceColor
+            radius: 8
+            border.color: Theme.borderColor
+        }
+
+        ColumnLayout {
+            anchors.fill: parent
+            spacing: 16
+
+            Label {
+                id: qrCodeText
+                Layout.fillWidth: true
+                text: ""
+                color: Theme.textColor
+                font.pixelSize: 12
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.WordWrap
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 300
+                color: Theme.qrCodeBgColor
+                radius: 4
+
+                Image {
+                    id: qrCodeImage
+                    anchors.centerIn: parent
+                    width: 280
+                    height: 280
+                    smooth: false
+                    fillMode: Image.PreserveAspectFit
+                    source: ""
+                }
+            }
+
+            Label {
+                Layout.fillWidth: true
+                text: qsTr("Scan QR code to access share")
+                color: Theme.textSecondary
+                font.pixelSize: 12
+                horizontalAlignment: Text.AlignHCenter
+            }
+
+            Button {
+                Layout.alignment: Qt.AlignHCenter
+                text: qsTr("Copy Link")
+                contentItem: Label {
+                    text: parent.text
+                    color: Theme.textOnAccentColor
+                    horizontalAlignment: Text.AlignHCenter
+                }
+                background: Rectangle {
+                    color: Theme.accentColor
+                    radius: 4
+                    implicitWidth: 100
+                    implicitHeight: 32
+                }
+                onClicked: copyToClipboard(qrCodeText.text)
+            }
+        }
+    }
+
+    Rectangle {
+        id: copyToast
+        x: (parent.width - width) / 2
+        y: parent.height - height - 20
+        width: 160
+        height: 36
+        color: Theme.overlayColor
+        radius: 18
+        visible: false
+        z: 100
+
+        function show() {
+            opacity = 1
+            visible = true
+            copyToastTimer.restart()
+        }
+
+        Label {
+            anchors.centerIn: parent
+            text: qsTr("✓ Copied to clipboard")
+            color: Theme.textOnAccentColor
+            font.pixelSize: 13
+        }
+
+        Timer {
+            id: copyToastTimer
+            interval: 1500
+            onTriggered: {
+                copyToast.opacity = 0
+                copyToast.visible = false
+            }
+        }
+
+        Behavior on opacity {
+            NumberAnimation { duration: 300 }
+        }
+    }
+}

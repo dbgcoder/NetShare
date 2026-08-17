@@ -1,0 +1,1262 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-i18n="title_send">NetShare - 发送文件</title>
+    <style>
+        :root {
+            --bg-primary: #0f0f23;
+            --bg-card: #16213e;
+            --bg-hover: #1a1a2e;
+            --accent: #4caf50;
+            --accent-hover: #66bb6a;
+            --text-primary: #eee;
+            --text-secondary: #888;
+            --text-muted: #555;
+            --border: #2a2a3e;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .container { max-width: 540px; width: 100%; }
+        .card {
+            background: var(--bg-card);
+            border-radius: 16px;
+            padding: 40px;
+        }
+        h1 { text-align: center; font-size: 24px; margin-bottom: 8px; }
+        .subtitle { text-align: center; color: var(--text-secondary); margin-bottom: 30px; font-size: 14px; }
+
+        .upload-area {
+            border: 2px dashed var(--border);
+            border-radius: 12px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-bottom: 20px;
+        }
+        .upload-area:hover, .upload-area.dragover {
+            border-color: var(--accent);
+            background: rgba(76, 175, 80, 0.05);
+        }
+        .upload-icon { font-size: 48px; margin-bottom: 12px; }
+        .upload-text { color: var(--text-secondary); font-size: 14px; }
+        .upload-text span { color: var(--accent); font-weight: 600; }
+
+        .file-input { display: none; }
+
+        .btn-group {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+        .btn-group label {
+            flex: 1;
+            padding: 10px;
+            background: var(--bg-hover);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+            display: block;
+        }
+        .btn-select-file { color: var(--accent); }
+        .btn-select-file:hover { background: rgba(76, 175, 80, 0.1); }
+        .btn-select-folder { color: #2196f3; }
+        .btn-select-folder:hover { background: rgba(33, 150, 243, 0.1); }
+
+        .file-list { margin-bottom: 20px; max-height: 240px; overflow-y: auto; }
+        .file-item {
+            display: flex;
+            align-items: center;
+            padding: 10px 14px;
+            background: var(--bg-primary);
+            border-radius: 8px;
+            margin-bottom: 8px;
+        }
+        .file-item-icon {
+            width: 32px; height: 32px;
+            background: var(--accent);
+            border-radius: 6px;
+            display: flex; justify-content: center; align-items: center;
+            margin-right: 12px;
+            font-size: 16px;
+            flex-shrink: 0;
+        }
+        .file-item-info { flex: 1; min-width: 0; }
+        .file-item-name {
+            font-size: 14px; color: var(--text-primary);
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .file-item-size { font-size: 12px; color: var(--text-secondary); }
+        .file-item-progress {
+            height: 3px; background: var(--border);
+            border-radius: 2px; overflow: hidden; margin-top: 4px;
+        }
+        .file-item-progress-fill {
+            height: 100%; background: var(--accent);
+            width: 0%; transition: width 0.2s;
+        }
+        .file-item-status { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+        .file-item-remove {
+            width: 24px; height: 24px;
+            border: none; background: #e94560; color: #fff;
+            border-radius: 50%; cursor: pointer; font-size: 14px;
+            display: flex; justify-content: center; align-items: center;
+            flex-shrink: 0;
+        }
+        .file-summary {
+            text-align: right;
+            padding: 4px 14px;
+            color: var(--text-secondary);
+            font-size: 12px;
+        }
+
+        .progress-wrap { margin-bottom: 20px; display: none; }
+        .progress-wrap.active { display: block; }
+        .progress-bar {
+            height: 6px; background: var(--border);
+            border-radius: 3px; overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%; background: var(--accent);
+            width: 0%; transition: width 0.3s;
+        }
+        .progress-info {
+            display: flex; justify-content: space-between;
+            margin-top: 8px; font-size: 12px; color: var(--text-secondary);
+        }
+
+        .btn {
+            width: 100%;
+            padding: 14px;
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s, transform 0.1s;
+        }
+        .btn:hover { background: var(--accent-hover); transform: translateY(-1px); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+        .result {
+            text-align: center;
+            padding: 20px;
+            display: none;
+        }
+        .result.active { display: block; }
+        .result-icon { font-size: 48px; margin-bottom: 12px; }
+        .result-text { color: var(--text-secondary); font-size: 14px; margin-bottom: 16px; }
+
+        .chat-section {
+            margin-top: 20px;
+            border-top: 1px solid var(--border);
+            padding-top: 20px;
+        }
+        .chat-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .chat-messages {
+            max-height: 200px;
+            overflow-y: auto;
+            margin-bottom: 12px;
+            background: var(--bg-primary);
+            border-radius: 8px;
+            padding: 10px;
+        }
+        .chat-msg {
+            margin-bottom: 8px;
+            font-size: 13px;
+            display: flex;
+        }
+        .chat-msg-sent {
+            justify-content: flex-end;
+        }
+        .chat-msg-received {
+            justify-content: flex-start;
+        }
+        .chat-msg-time {
+            font-size: 10px;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+        .chat-msg-text {
+            padding: 8px 14px;
+            border-radius: 14px;
+            word-break: break-word;
+            user-select: text;
+            -webkit-user-select: text;
+            line-height: 1.5;
+        }
+        .chat-msg-sent .chat-msg-text {
+            background: #4CAF50;
+            color: #fff;
+            border-bottom-right-radius: 4px;
+        }
+        .chat-msg-received .chat-msg-text {
+            background: #2a2a2a;
+            color: #e0e0e0;
+            border-bottom-left-radius: 4px;
+        }
+        .chat-input-row {
+            display: flex;
+            gap: 8px;
+        }
+        .chat-input {
+            flex: 1;
+            padding: 10px 14px;
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 14px;
+            outline: none;
+        }
+        .chat-input:focus {
+            border-color: var(--accent);
+        }
+        .chat-send-btn {
+            padding: 10px 20px;
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+            white-space: nowrap;
+        }
+        .chat-send-btn:hover { background: var(--accent-hover); }
+        .chat-send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .footer { text-align: center; color: var(--text-muted); font-size: 12px; margin-top: 24px; }
+
+        .resume-hint {
+            background: rgba(33, 150, 243, 0.1);
+            border: 1px solid rgba(33, 150, 243, 0.3);
+            border-radius: 8px;
+            padding: 10px 14px;
+            margin-bottom: 16px;
+            font-size: 13px;
+            color: #64b5f6;
+            display: none;
+        }
+        .resume-hint.active { display: block; }
+
+        .btn-retry {
+            width: 100%;
+            padding: 12px;
+            background: #e94560;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 8px;
+            display: none;
+        }
+        .btn-retry.active { display: block; }
+        .btn-retry:hover { background: #ff6b81; }
+
+        .ws-status {
+            display: flex; align-items: center; justify-content: center;
+            gap: 6px; font-size: 11px; color: var(--text-muted); margin-top: 8px;
+        }
+        .ws-dot {
+            width: 8px; height: 8px; border-radius: 50%;
+            background: #e94560; transition: background 0.3s;
+        }
+        .ws-dot.connected { background: #4caf50; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card" id="uploadCard">
+            <h1 data-i18n="send_file">📤 发送文件</h1>
+            <p class="subtitle" data-i18n="send_file_subtitle">选择文件发送到对方设备</p>
+
+            <div class="upload-area" id="uploadArea">
+                <div class="upload-icon">📁</div>
+                <p class="upload-text" data-i18n="drag_drop_hint">将文件或文件夹拖拽到此处</p>
+            </div>
+
+            <input type="file" id="fileInput" class="file-input" multiple>
+            <input type="file" id="folderInput" class="file-input" multiple webkitdirectory directory mozdirectory>
+
+            <div class="btn-group">
+                <label for="fileInput" class="btn-select-file" data-i18n="select_file">📄 选择文件</label>
+                <label for="folderInput" class="btn-select-folder" data-i18n="select_folder">📁 选择文件夹</label>
+            </div>
+
+            <div class="file-list" id="fileList"></div>
+
+            <div class="progress-wrap" id="progressWrap">
+                <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+                <div class="progress-info">
+                    <span id="progressText">0%</span>
+                    <span id="statusText" data-i18n="sending">发送中...</span>
+                </div>
+            </div>
+
+            <div class="resume-hint" id="resumeHint"></div>
+
+            <button class="btn" id="uploadBtn" disabled data-i18n="start_send">
+                开始发送
+            </button>
+
+            <button class="btn-retry" id="retryBtn" data-i18n="retry_failed">
+                重试失败文件
+            </button>
+
+            <div class="result" id="resultSection">
+                <div class="result-icon">✅</div>
+                <div class="result-text" id="resultText" data-i18n="send_success">文件发送成功！</div>
+            </div>
+
+            <div class="chat-section">
+                <div class="chat-title" data-i18n="send_message">💬 发送消息</div>
+                <div class="chat-messages" id="chatMessages"></div>
+                <div class="chat-input-row">
+                    <input type="text" class="chat-input" id="chatInput" data-i18n-placeholder="input_message" placeholder="输入消息内容..." maxlength="500">
+                    <button class="chat-send-btn" id="chatSendBtn" data-i18n="send">发送</button>
+                </div>
+            </div>
+        </div>
+        <p class="footer" data-i18n="powered_by">由 NetShare 提供 <span class="ws-status" id="wsStatus"><span class="ws-dot" id="wsDot"></span><span id="wsText"></span></span></p>
+    </div>
+
+<script src="common.js"></script>
+<script>
+// Receive page uses common.js for i18n
+
+// ===== State =====
+var selectedFiles = []; // { file: File, relativePath: string }
+var uploadStatus = {};
+var uploadedSize = 0;
+var totalUploadSize = 0;
+var failedFiles = [];
+var uploadSessionId = '';
+var chunkInfo = {};
+var xhrProgressActive = false;
+var ws = null;
+var wsConnected = false;
+var MAX_CONCURRENT = 3;
+var recheckCount = 0;
+var MAX_RECHECK_RETRIES = 3;
+var uploadStartTime = 0;
+var uploadSpeedHistory = [];
+var activeChunkProgress = {};
+var wsDisconnectTimer = null;
+var isUploading = false;
+var pendingPartialInfo = null;
+
+// ===== DOM refs =====
+var uploadArea = document.getElementById('uploadArea');
+var fileInput = document.getElementById('fileInput');
+var folderInput = document.getElementById('folderInput');
+var fileListEl = document.getElementById('fileList');
+var uploadBtn = document.getElementById('uploadBtn');
+var retryBtn = document.getElementById('retryBtn');
+var resumeHint = document.getElementById('resumeHint');
+
+// Initialize i18n first, then set up page
+applyI18n(function() {
+    document.title = t('title_send');
+    renderFileList();
+});
+
+// ===== Global error handler =====
+window.onerror = function(msg, url, line, col, err) {
+    alert(t('js_error') + msg + ' (line ' + line + ')');
+};
+window.addEventListener('unhandledrejection', function(e) {
+    alert(t('promise_error') + (e.reason && e.reason.message ? e.reason.message : e.reason));
+});
+
+// ===== WebSocket =====
+function connectWebSocket() {
+    if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+        if (ws.readyState === WebSocket.OPEN && uploadSessionId) {
+            ws.send(JSON.stringify({ type: 'subscribe', data: { token: uploadSessionId } }));
+        }
+        return;
+    }
+    var wsUrl = 'ws://' + location.host + '/ws';
+    try { ws = new WebSocket(wsUrl); } catch (e) { return; }
+
+    ws.onopen = function() {
+        wsConnected = true;
+        updateWsStatus(true);
+        if (wsDisconnectTimer) { clearTimeout(wsDisconnectTimer); wsDisconnectTimer = null; }
+        if (uploadSessionId) {
+            ws.send(JSON.stringify({ type: 'subscribe', data: { token: uploadSessionId } }));
+        }
+        ws.send(JSON.stringify({ type: 'subscribe', data: { token: 'chat' } }));
+    };
+    ws.onmessage = function(e) {
+        try {
+            var msg = JSON.parse(e.data);
+            if (msg.type === 'transfer_update' && msg.data && msg.data.progress !== undefined && !xhrProgressActive) {
+                var fill = document.getElementById('progressFill');
+                if (fill) fill.style.width = msg.data.progress + '%';
+                var pct = document.getElementById('progressText');
+                if (pct) pct.textContent = msg.data.progress + '%';
+                if (msg.data.speed) {
+                    var st = document.getElementById('statusText');
+                    if (st) st.textContent = t('sending') + ' ' + msg.data.progress + '%  ' + formatSize(msg.data.speed) + '/s';
+                }
+            } else if (msg.type === 'pause_upload') {
+                isUploading = false;
+                markAllActiveAsPaused();
+            } else if (msg.type === 'chat_message' && msg.data) {
+                if (isMsgDuplicate(msg.data.content || '', msg.data.timestamp)) {
+                    // skip echo of own sent message
+                } else {
+                    chatMessages.push({
+                        msgId: msg.data.msgId || '',
+                        content: msg.data.content || '',
+                        isSent: false,
+                        timestamp: msg.data.timestamp || new Date().toISOString(),
+                        fromUser: msg.data.fromUser || ''
+                    });
+                    renderChatMessages();
+                }
+            }
+        } catch (ex) {
+            alert('[WS Error] ' + (ex.message || ex));
+        }
+    };
+    ws.onclose = function() {
+        wsConnected = false;
+        updateWsStatus(false);
+        var hasActive = Object.values(uploadStatus).some(function(s) { return s === 'uploading' || s === 'pending'; });
+        if (hasActive) {
+            if (wsDisconnectTimer) clearTimeout(wsDisconnectTimer);
+            wsDisconnectTimer = setTimeout(function() {
+                wsDisconnectTimer = null;
+                if (!wsConnected && isUploading) {
+                    markAllActiveAsFailed();
+                    document.getElementById('statusText').textContent = t('disconnected');
+                    retryBtn.classList.add('active');
+                }
+            }, 10000);
+        }
+        setTimeout(connectWebSocket, 5000);
+    };
+    ws.onerror = function() {
+    };
+}
+
+function updateWsStatus(connected) {
+    var dot = document.getElementById('wsDot');
+    var text = document.getElementById('wsText');
+    if (dot) dot.className = 'ws-dot' + (connected ? ' connected' : '');
+    if (text) text.textContent = connected ? t('live_connection') : (isUploading ? t('connection_lost') : '');
+}
+
+// ===== Drag & Drop =====
+uploadArea.addEventListener('click', function() { fileInput.click(); });
+uploadArea.addEventListener('dragover', function(e) { e.preventDefault(); uploadArea.classList.add('dragover'); });
+uploadArea.addEventListener('dragleave', function() { uploadArea.classList.remove('dragover'); });
+uploadArea.addEventListener('drop', async function(e) {
+    e.preventDefault();
+    uploadArea.classList.remove('dragover');
+    var items = e.dataTransfer.items;
+    if (items && items.length > 0) {
+        var entries = [];
+        for (var i = 0; i < items.length; i++) {
+            var entry = items[i].webkitGetAsEntry ? items[i].webkitGetAsEntry() : null;
+            if (entry) entries.push(entry);
+        }
+        if (entries.length > 0) {
+            var files = await traverseEntries(entries, '');
+            files.forEach(function(f) { selectedFiles.push(f); });
+            renderFileList();
+            uploadBtn.disabled = selectedFiles.length === 0;
+            if (uploadBtn.style.display === 'none') {
+                uploadBtn.style.display = '';
+                retryBtn.classList.remove('active');
+                resumeHint.classList.remove('active');
+                document.getElementById('progressWrap').classList.remove('active');
+            }
+            return;
+        }
+    }
+    handleFiles(e.dataTransfer.files);
+});
+
+// ===== File input =====
+fileInput.addEventListener('change', function() {
+    var files = Array.from(fileInput.files);
+    files.forEach(function(f) { selectedFiles.push({ file: f, relativePath: f.name }); });
+    renderFileList();
+    uploadBtn.disabled = selectedFiles.length === 0;
+    if (selectedFiles.length > 0 && uploadBtn.style.display === 'none') {
+        uploadBtn.style.display = '';
+        retryBtn.classList.remove('active');
+        resumeHint.classList.remove('active');
+        document.getElementById('progressWrap').classList.remove('active');
+    }
+    fileInput.value = '';
+});
+
+folderInput.addEventListener('change', function() {
+    var files = Array.from(folderInput.files);
+    files.forEach(function(f) {
+        var relPath = f.webkitRelativePath || f.name;
+        selectedFiles.push({ file: f, relativePath: relPath });
+    });
+    renderFileList();
+    uploadBtn.disabled = selectedFiles.length === 0;
+    if (selectedFiles.length > 0 && uploadBtn.style.display === 'none') {
+        uploadBtn.style.display = '';
+        retryBtn.classList.remove('active');
+        resumeHint.classList.remove('active');
+        document.getElementById('progressWrap').classList.remove('active');
+    }
+    folderInput.value = '';
+});
+
+function handleFiles(files) {
+    for (var i = 0; i < files.length; i++) {
+        selectedFiles.push({ file: files[i], relativePath: files[i].name });
+    }
+    renderFileList();
+    uploadBtn.disabled = selectedFiles.length === 0;
+    if (selectedFiles.length > 0 && uploadBtn.style.display === 'none') {
+        uploadBtn.style.display = '';
+        retryBtn.classList.remove('active');
+        resumeHint.classList.remove('active');
+        document.getElementById('progressWrap').classList.remove('active');
+    }
+}
+
+// ===== Traverse directory entries =====
+function traverseEntries(entries, basePath) {
+    return new Promise(function(resolve) {
+        var results = [];
+        var pending = entries.length;
+        if (pending === 0) { resolve(results); return; }
+        for (var i = 0; i < entries.length; i++) {
+            (function(entry) {
+                if (entry.isFile) {
+                    entry.file(function(f) {
+                        var relativePath = basePath ? basePath + '/' + f.name : f.name;
+                        results.push({ file: f, relativePath: relativePath });
+                        if (--pending === 0) resolve(results);
+                    }, function() { if (--pending === 0) resolve(results); });
+                } else if (entry.isDirectory) {
+                    readAllDirectoryEntries(entry, basePath).then(function(subResults) {
+                        results = results.concat(subResults);
+                        if (--pending === 0) resolve(results);
+                    });
+                } else {
+                    if (--pending === 0) resolve(results);
+                }
+            })(entries[i]);
+        }
+    });
+}
+
+function readAllDirectoryEntries(dirEntry, parentPath) {
+    var dirPath = parentPath ? parentPath + '/' + dirEntry.name : dirEntry.name;
+    var reader = dirEntry.createReader();
+    return new Promise(function(resolve) {
+        var allEntries = [];
+        function readBatch() {
+            reader.readEntries(function(batch) {
+                if (batch.length === 0) {
+                    if (allEntries.length === 0) { resolve([]); return; }
+                    traverseEntries(allEntries, dirPath).then(resolve);
+                } else {
+                    allEntries = allEntries.concat(batch);
+                    readBatch();
+                }
+            }, function() { resolve([]); });
+        }
+        readBatch();
+    });
+}
+
+// ===== Render file list =====
+function renderFileList() {
+    fileListEl.innerHTML = '';
+    var totalSize = 0;
+    selectedFiles.forEach(function(item, i) {
+        totalSize += (item.file ? item.file.size : 0);
+        var div = document.createElement('div');
+        div.className = 'file-item';
+        div.id = 'file-item-' + i;
+        div.innerHTML =
+            '<div class="file-item-icon">📄</div>' +
+            '<div class="file-item-info">' +
+                '<div class="file-item-name" title="' + escapeHtml(item.relativePath) + '">' + escapeHtml(item.relativePath) + '</div>' +
+                '<div class="file-item-size">' + (item.file ? formatSize(item.file.size) : t('unknown_size')) + '</div>' +
+                '<div class="file-item-progress"><div class="file-item-progress-fill" id="file-progress-' + i + '"></div></div>' +
+                '<div class="file-item-status" id="file-status-' + i + '"></div>' +
+            '</div>' +
+            '<button class="file-item-remove" data-index="' + i + '">×</button>';
+        fileListEl.appendChild(div);
+    });
+    if (selectedFiles.length > 0) {
+        var summary = document.createElement('div');
+        summary.className = 'file-summary';
+        summary.textContent = tf('file_count', selectedFiles.length, formatSize(totalSize));
+        fileListEl.appendChild(summary);
+    }
+}
+
+// Use event delegation for remove buttons
+fileListEl.addEventListener('click', function(e) {
+    var btn = e.target.closest('.file-item-remove');
+    if (btn) {
+        var idx = parseInt(btn.getAttribute('data-index'));
+        if (!isNaN(idx)) {
+            selectedFiles.splice(idx, 1);
+            renderFileList();
+            uploadBtn.disabled = selectedFiles.length === 0;
+        }
+    }
+});
+
+// ===== Utility =====
+// formatSize and escapeHtml are provided by common.js
+
+function calcUploadSpeed(currentBytes) {
+    var now = Date.now();
+    if (uploadStartTime === 0) { uploadStartTime = now; return 0; }
+    var elapsed = (now - uploadStartTime) / 1000;
+    if (elapsed < 0.5) return 0;
+    uploadSpeedHistory.push({ time: now, bytes: currentBytes });
+    while (uploadSpeedHistory.length > 20) uploadSpeedHistory.shift();
+    if (uploadSpeedHistory.length < 2) return 0;
+    var first = uploadSpeedHistory[0];
+    var dt = (now - first.time) / 1000;
+    if (dt < 0.3) return 0;
+    return Math.round((currentBytes - first.bytes) / dt);
+}
+
+// ===== Upload logic =====
+uploadBtn.addEventListener('click', startUpload);
+retryBtn.addEventListener('click', retryFailed);
+
+async function startUpload() {
+    if (selectedFiles.length === 0) return;
+
+    totalUploadSize = 0;
+    selectedFiles.forEach(function(item) { totalUploadSize += item.file.size; });
+    uploadedSize = 0;
+    failedFiles = [];
+    uploadStatus = {};
+    chunkInfo = {};
+    xhrProgressActive = false;
+    uploadSessionId = '';
+    recheckCount = 0;
+    uploadStartTime = 0;
+    uploadSpeedHistory = [];
+    activeChunkProgress = {};
+    isUploading = true;
+    pendingPartialInfo = null;
+    selectedFiles.forEach(function(item) { uploadStatus[item.relativePath] = 'pending'; });
+
+    document.getElementById('progressWrap').classList.add('active');
+    uploadBtn.disabled = true;
+    retryBtn.classList.remove('active');
+    resumeHint.classList.remove('active');
+    updateProgress(0, selectedFiles.length, 0, totalUploadSize);
+
+    var filesToUpload = selectedFiles.slice();
+    try {
+        var checkBody = JSON.stringify({
+            files: selectedFiles.map(function(item) { return { path: item.relativePath, size: item.file.size }; })
+        });
+        var checkResp = await fetch('/api/upload/check', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: checkBody
+        });
+        if (checkResp.ok) {
+            var checkData = await checkResp.json();
+            if (checkData.sessionId) {
+                uploadSessionId = checkData.sessionId;
+                connectWebSocket();
+            }
+            var skipCount = 0;
+            var resumeCount = 0;
+            if (checkData.existing && checkData.existing.length > 0) {
+                var existingPaths = new Set(checkData.existing.map(function(f) { return f.path; }));
+                var skippedSize = selectedFiles
+                    .filter(function(item) { return existingPaths.has(item.relativePath); })
+                    .reduce(function(sum, item) { return sum + item.file.size; }, 0);
+                existingPaths.forEach(function(path) { uploadStatus[path] = 'done'; });
+                uploadedSize += skippedSize;
+                filesToUpload = selectedFiles.filter(function(item) { return !existingPaths.has(item.relativePath); });
+                skipCount = existingPaths.size;
+            }
+            if (checkData.partial && checkData.partial.length > 0) {
+                checkData.partial.forEach(function(f) {
+                    if (f.useChunking !== false && f.chunkSize && f.chunkCount) {
+                        chunkInfo[f.path] = {
+                            chunkSize: f.chunkSize,
+                            chunkCount: f.chunkCount,
+                            completedChunks: new Set(f.completedChunks || []),
+                            useChunking: true
+                        };
+                        uploadedSize += (f.completedBytes !== undefined ? f.completedBytes : (f.completedChunks || []).length * f.chunkSize);
+                    } else {
+                        chunkInfo[f.path] = { resumeOffset: f.size, useChunking: false };
+                        uploadedSize += f.size;
+                    }
+                });
+                resumeCount = checkData.partial.length;
+            }
+            if (skipCount > 0 || resumeCount > 0) {
+                var hint = t('resume_detected');
+                var parts = [];
+                if (skipCount > 0) parts.push(tf('skip_files', skipCount));
+                if (resumeCount > 0) parts.push(tf('resume_files', resumeCount));
+                resumeHint.textContent = hint + parts.join('，');
+                resumeHint.classList.add('active');
+            }
+        } else {
+            alert(t('check_error') + checkResp.status);
+        }
+    } catch (ex) {
+        alert(t('check_failed') + (ex.message || ex));
+    }
+
+    try {
+        await uploadConcurrent(filesToUpload);
+    } catch (ex) {
+        alert(t('upload_error') + (ex.message || ex));
+    }
+
+    var failCount = Object.values(uploadStatus).filter(function(s) { return s === 'failed'; }).length;
+    var pausedCount = Object.values(uploadStatus).filter(function(s) { return s === 'paused'; }).length;
+    var doneCount = Object.values(uploadStatus).filter(function(s) { return s === 'done'; }).length;
+    if (pausedCount > 0) {
+        document.getElementById('statusText').textContent = t('upload_paused');
+        retryBtn.classList.add('active');
+    } else if (failCount > 0) {
+        document.getElementById('statusText').textContent = tf('files_failed', failCount);
+        retryBtn.classList.add('active');
+    } else if (doneCount === selectedFiles.length) {
+        await finalize();
+    }
+}
+
+async function uploadConcurrent(fileList) {
+    if (!fileList.length) return;
+    var idx = 0;
+    var total = selectedFiles.length;
+
+    async function next() {
+        while (idx < fileList.length && isUploading) {
+            var item = fileList[idx++];
+            uploadStatus[item.relativePath] = 'uploading';
+            updateFileStatus(item.relativePath, t('uploading'));
+            try {
+                await uploadOne(item);
+                if (!isUploading) break;
+                uploadStatus[item.relativePath] = 'done';
+                updateFileStatus(item.relativePath, t('completed'));
+            } catch (e) {
+                if (!isUploading) break;
+                uploadStatus[item.relativePath] = 'failed';
+                if (failedFiles.indexOf(item) === -1) {
+                    failedFiles.push(item);
+                }
+                updateFileStatus(item.relativePath, t('failed') + (e.message || e));
+            }
+            var doneCount = Object.values(uploadStatus).filter(function(s) { return s === 'done'; }).length;
+            updateProgress(doneCount, total, uploadedSize, totalUploadSize);
+        }
+    }
+
+    var workers = [];
+    var cc = Math.min(MAX_CONCURRENT, fileList.length);
+    for (var i = 0; i < cc; i++) workers.push(next());
+    await Promise.all(workers);
+}
+
+function uploadOne(item) {
+    var info = chunkInfo[item.relativePath];
+    if (info && info.useChunking) return uploadChunked(item, info);
+    return uploadSmall(item, info);
+}
+
+function uploadChunked(item, info) {
+    var fileSize = item.file.size;
+    var chunkSize = info.chunkSize;
+    var totalChunks = Math.ceil(fileSize / chunkSize);
+    var pending = [];
+    for (var i = 0; i < totalChunks; i++) {
+        if (!info.completedChunks.has(i)) pending.push(i);
+    }
+    if (pending.length === 0) return Promise.resolve();
+
+    var nextCI = 0;
+    var failedChunks = [];
+
+    function uploadNextChunk() {
+        return new Promise(function(resolveAll) {
+            var promises = [];
+            var cc = Math.min(MAX_CONCURRENT, pending.length);
+            for (var w = 0; w < cc; w++) {
+                promises.push(new Promise(function(resolveW, rejectW) {
+                    function doNext() {
+                        if (nextCI >= pending.length) { resolveW(); return; }
+                        var ci = pending[nextCI++];
+                        var start = ci * chunkSize;
+                        var end = Math.min(start + chunkSize, fileSize);
+                        var blob = item.file.slice(start, end);
+                        var xhr = new XMLHttpRequest();
+                        xhr.open('POST', '/api/upload/file', true);
+                        xhr.setRequestHeader('X-Upload-Session', uploadSessionId);
+                        xhr.setRequestHeader('X-File-Path', encodeURIComponent(item.relativePath));
+                        xhr.setRequestHeader('X-Chunk-Index', ci.toString());
+                        xhr.upload.onprogress = function(e) {
+                            if (e.lengthComputable) {
+                                xhrProgressActive = true;
+                                activeChunkProgress[ci] = e.loaded;
+                                var activeLoaded = 0;
+                                for (var k in activeChunkProgress) activeLoaded += activeChunkProgress[k];
+                                var cb = uploadedSize + activeLoaded;
+                                var pct = Math.min(100, Math.round(cb / totalUploadSize * 100));
+                                var fill = document.getElementById('progressFill');
+                                if (fill) fill.style.width = pct + '%';
+                                var st = document.getElementById('statusText');
+                                var spd = calcUploadSpeed(cb);
+                                if (st) st.textContent = formatSize(cb) + ' / ' + formatSize(totalUploadSize) + '  ' + formatSize(spd) + '/s';
+                            }
+                        };
+                        xhr.onload = function() {
+                            xhrProgressActive = false;
+                            delete activeChunkProgress[ci];
+                            if (xhr.status === 200) {
+                                info.completedChunks.add(ci);
+                                uploadedSize += blob.size;
+                                doNext();
+                            } else if (xhr.status === 409) {
+                                nextCI = pending.length;
+                                isUploading = false;
+                                markAllActiveAsPaused();
+                                rejectW(new Error(t('upload_paused_err')));
+                            } else if (xhr.status === 410) {
+                                recheckAndResume(item, info).then(function() {
+                                    nextCI = pending.length;
+                                    resolveW();
+                                }).catch(function() {
+                                    failedChunks.push(ci);
+                                    doNext();
+                                });
+                            } else {
+                                failedChunks.push(ci);
+                                doNext();
+                            }
+                        };
+                        xhr.onerror = function() { xhrProgressActive = false; delete activeChunkProgress[ci]; failedChunks.push(ci); doNext(); };
+                        xhr.timeout = 0;
+                        xhr.send(blob);
+                    }
+                    doNext();
+                }));
+            }
+            Promise.all(promises).then(resolveAll);
+        });
+    }
+
+    return uploadNextChunk().then(function() {
+        // Retry failed chunks up to 3 times
+        var maxRetries = 3;
+        function retryFailed() {
+            if (failedChunks.length === 0 || maxRetries <= 0) {
+                if (failedChunks.length > 0) {
+                    throw new Error(failedChunks.length + ' chunks failed to upload');
+                }
+                return;
+            }
+            var retryList = failedChunks.slice();
+            failedChunks = [];
+            maxRetries--;
+            nextCI = 0;
+            pending = retryList;
+            return uploadNextChunk().then(retryFailed);
+        }
+        return retryFailed();
+    });
+}
+
+function recheckAndResume(item, info) {
+    recheckCount++;
+    console.log('[Upload][recheck.triggered] file=' + item.relativePath + ', retry=' + recheckCount);
+    if (recheckCount > MAX_RECHECK_RETRIES) {
+        console.log('[Upload][recheck.failed] exceeded max retries');
+        return Promise.reject(new Error(tf('resume_failed', MAX_RECHECK_RETRIES)));
+    }
+    return fetch('/api/upload/check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ files: [{ path: item.relativePath, size: item.file.size }] })
+    }).then(function(resp) {
+        if (!resp.ok) throw new Error('recheck HTTP ' + resp.status);
+        return resp.json();
+    }).then(function(data) {
+        console.log('[Upload][session.expired] got new sessionId=' + data.sessionId);
+        if (data.sessionId) {
+            uploadSessionId = data.sessionId;
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'subscribe', data: { token: uploadSessionId } }));
+            }
+        }
+        if (data.partial && data.partial.length > 0) {
+            var f = data.partial[0];
+            if (f.useChunking !== false && f.chunkSize && f.chunkCount) {
+                info.chunkSize = f.chunkSize;
+                info.chunkCount = f.chunkCount;
+                info.completedChunks = new Set(f.completedChunks || []);
+                info.useChunking = true;
+                console.log('[Upload][resume.from_check] file=' + item.relativePath + ', completedChunks=' + (f.completedChunks || []).length);
+            } else {
+                info.resumeOffset = f.size;
+                info.useChunking = false;
+                console.log('[Upload][resume.from_check] file=' + item.relativePath + ', resumeOffset=' + f.size);
+            }
+        }
+    });
+}
+
+function uploadSmall(item, info) {
+    return new Promise(function(resolve, reject) {
+        var offset = (info && info.resumeOffset) ? info.resumeOffset : 0;
+        var blob = offset > 0 ? item.file.slice(offset) : item.file;
+        var fd = new FormData();
+        fd.append('file', blob, item.relativePath);
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', '/api/upload/file', true);
+        if (uploadSessionId) xhr.setRequestHeader('X-Upload-Session', uploadSessionId);
+        xhr.setRequestHeader('X-File-Path', encodeURIComponent(item.relativePath));
+        xhr.upload.onprogress = function(e) {
+            if (e.lengthComputable) {
+                xhrProgressActive = true;
+                var totalLoaded = offset + e.loaded;
+                var pct = Math.round(totalLoaded / item.file.size * 100);
+                var fill = document.getElementById('progressFill');
+                var st = document.getElementById('statusText');
+                if (fill) fill.style.width = pct + '%';
+                var spd = calcUploadSpeed(uploadedSize + totalLoaded);
+                if (st) st.textContent = formatSize(totalLoaded) + ' / ' + formatSize(item.file.size) + '  ' + formatSize(spd) + '/s';
+            }
+        };
+        xhr.timeout = 0;
+        xhr.onload = function() {
+            xhrProgressActive = false;
+            if (xhr.status === 200) {
+                uploadedSize += item.file.size - offset;
+                resolve();
+            } else if (xhr.status === 409) {
+                isUploading = false;
+                markAllActiveAsPaused();
+                reject(new Error(t('upload_paused_err')));
+            } else if (xhr.status === 410) {
+                recheckAndResume(item, info).then(resolve).catch(function(e) {
+                    reject(new Error('recheck failed: ' + (e.message || e)));
+                });
+            } else {
+                reject(new Error('HTTP ' + xhr.status + ': ' + xhr.responseText.substring(0, 200)));
+            }
+        };
+        xhr.onerror = function() { xhrProgressActive = false; reject(new Error(t('network_error') + item.relativePath)); };
+        xhr.ontimeout = function() { xhrProgressActive = false; reject(new Error(t('timeout') + item.relativePath)); };
+        xhr.send(fd);
+    });
+}
+
+function updateProgress(done, total, doneSz, totalSz) {
+    var pct = totalSz > 0 ? Math.round(doneSz / totalSz * 100) : (total > 0 ? Math.round(done / total * 100) : 0);
+    var fill = document.getElementById('progressFill');
+    if (fill) fill.style.width = pct + '%';
+    var pctEl = document.getElementById('progressText');
+    if (pctEl) pctEl.textContent = pct + '% (' + done + '/' + total + ')';
+    var st = document.getElementById('statusText');
+    var spd = calcUploadSpeed(doneSz);
+    if (st) st.textContent = t('sending') + ' ' + formatSize(doneSz) + ' / ' + formatSize(totalSz) + '  ' + formatSize(spd) + '/s';
+}
+
+function updateFileStatus(relativePath, statusText) {
+    for (var i = 0; i < selectedFiles.length; i++) {
+        if (selectedFiles[i].relativePath === relativePath) {
+            var el = document.getElementById('file-status-' + i);
+            if (el) el.textContent = statusText;
+            break;
+        }
+    }
+}
+
+function markAllActiveAsFailed() {
+    isUploading = false;
+    for (var path in uploadStatus) {
+        if (uploadStatus[path] === 'uploading' || uploadStatus[path] === 'pending') {
+            uploadStatus[path] = 'failed';
+            var found = selectedFiles.find(function(f) { return f.relativePath === path; });
+            if (found && failedFiles.indexOf(found) === -1) {
+                failedFiles.push(found);
+            }
+            updateFileStatus(path, t('conn_broken'));
+        }
+    }
+}
+
+function markAllActiveAsPaused() {
+    isUploading = false;
+    for (var path in uploadStatus) {
+        if (uploadStatus[path] === 'uploading' || uploadStatus[path] === 'pending') {
+            uploadStatus[path] = 'paused';
+            var found = selectedFiles.find(function(f) { return f.relativePath === path; });
+            if (found && failedFiles.indexOf(found) === -1) {
+                failedFiles.push(found);
+            }
+            updateFileStatus(path, t('paused'));
+        }
+    }
+    document.getElementById('statusText').textContent = t('upload_paused');
+    retryBtn.classList.add('active');
+}
+
+async function checkUnfinishedTasks() {
+    try {
+        var resp = await fetch('/api/upload/pending');
+        if (!resp.ok) return;
+        var data = await resp.json();
+        if (data.partial && data.partial.length > 0) {
+            var hint = document.getElementById('resumeHint');
+            hint.textContent = tf('unfinished_tasks', data.partial.length);
+            hint.classList.add('active');
+            document.getElementById('progressWrap').classList.add('active');
+            var completedBytes = 0;
+            var totalAll = 0;
+            data.partial.forEach(function(f) {
+                completedBytes += f.completedBytes || 0;
+                totalAll += f.size;
+            });
+            if (totalAll > 0) {
+                var pct = Math.round(completedBytes / totalAll * 100);
+                document.getElementById('progressFill').style.width = pct + '%';
+                document.getElementById('progressText').textContent = pct + '%';
+                document.getElementById('statusText').textContent = t('pending_tasks');
+            }
+            pendingPartialInfo = data.partial;
+        }
+    } catch (ex) {
+        console.log('[checkUnfinishedTasks] error: ' + ex.message);
+    }
+}
+
+async function retryFailed() {
+    if (!failedFiles.length) return;
+
+    retryBtn.classList.remove('active');
+    var retryRaw = failedFiles.slice();
+    failedFiles = [];
+    var seen = {};
+    var retry = retryRaw.filter(function(x) {
+        if (seen[x.relativePath]) return false;
+        seen[x.relativePath] = true;
+        return true;
+    });
+    chunkInfo = {};
+    xhrProgressActive = false;
+
+    try {
+        var cr = await fetch('/api/upload/check', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                files: retry.map(function(x) { return { path: x.relativePath, size: x.file.size }; })
+            })
+        });
+        if (cr.ok) {
+            var cd = await cr.json();
+            if (cd.sessionId) { uploadSessionId = cd.sessionId; connectWebSocket(); }
+            if (cd.existing && cd.existing.length > 0) {
+                var ep = new Set(cd.existing.map(function(f) { return f.path; }));
+                retry = retry.filter(function(x) { return !ep.has(x.relativePath); });
+                ep.forEach(function(p) { uploadStatus[p] = 'done'; });
+            }
+            if (cd.partial && cd.partial.length > 0) {
+                cd.partial.forEach(function(f) {
+                    if (f.useChunking !== false && f.chunkSize && f.chunkCount) {
+                        chunkInfo[f.path] = {
+                            chunkSize: f.chunkSize,
+                            chunkCount: f.chunkCount,
+                            completedChunks: new Set(f.completedChunks || []),
+                            useChunking: true
+                        };
+                    } else {
+                        chunkInfo[f.path] = { resumeOffset: f.size, useChunking: false };
+                    }
+                });
+            }
+        }
+    } catch (ex) {
+        alert(t('retry_check_failed') + (ex.message || ex));
+    }
+
+    retry.forEach(function(x) { uploadStatus[x.relativePath] = 'pending'; });
+    await uploadConcurrent(retry);
+
+    var failCount = Object.values(uploadStatus).filter(function(s) { return s === 'failed'; }).length;
+    var pausedCount = Object.values(uploadStatus).filter(function(s) { return s === 'paused'; }).length;
+    var doneCount = Object.values(uploadStatus).filter(function(s) { return s === 'done'; }).length;
+    if (pausedCount > 0) {
+        document.getElementById('statusText').textContent = t('upload_paused');
+        retryBtn.classList.add('active');
+    } else if (failCount > 0) {
+        document.getElementById('statusText').textContent = tf('files_failed', failCount);
+        retryBtn.classList.add('active');
+    } else if (doneCount === selectedFiles.length) {
+        await finalize();
+    }
+}
+
+async function finalize() {
+    document.getElementById('statusText').textContent = t('finalizing');
+    var firstPath = selectedFiles[0].relativePath;
+    var isFolder = firstPath.indexOf('/') >= 0;
+    var folderRoot = isFolder ? firstPath.split('/')[0] : '';
+
+    try {
+        var resp = await fetch('/api/upload/finalize', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                folder: folderRoot,
+                isFolder: isFolder,
+                totalSize: totalUploadSize,
+                fileCount: selectedFiles.length,
+                token: '',
+                isReceive: true,
+                sessionId: uploadSessionId
+            })
+        });
+        if (resp.ok) {
+            var d = await resp.json();
+            uploadBtn.style.display = 'none';
+            document.getElementById('progressWrap').classList.remove('active');
+            retryBtn.classList.remove('active');
+            document.getElementById('resultText').textContent = tf('sent_count', d.count);
+            document.getElementById('resultSection').classList.add('active');
+        } else {
+            document.getElementById('statusText').textContent = t('finalize_failed');
+            uploadBtn.disabled = false;
+        }
+    } catch (e) {
+        document.getElementById('statusText').textContent = t('finalize_failed');
+        uploadBtn.disabled = false;
+    }
+}
+
+// ===== Chat =====
+var chatMessages = [];
+var chatInput = document.getElementById('chatInput');
+var chatSendBtn = document.getElementById('chatSendBtn');
+var chatMessagesEl = document.getElementById('chatMessages');
+
+function renderChatMessages() {
+    chatMessagesEl.innerHTML = '';
+    chatMessages.forEach(function(m) {
+        var div = document.createElement('div');
+        div.className = 'chat-msg ' + (m.isSent ? 'chat-msg-sent' : 'chat-msg-received');
+        var timeStr = '';
+        if (m.timestamp) {
+            try { timeStr = new Date(m.timestamp).toLocaleTimeString('zh-CN', {hour:'2-digit',minute:'2-digit'}); }
+            catch(e) { timeStr = ''; }
+        }
+        var bubble = document.createElement('div');
+        bubble.style.cssText = 'display:flex;flex-direction:column;max-width:75%;' + (m.isSent ? 'align-items:flex-end;' : 'align-items:flex-start;');
+        bubble.innerHTML = '<div class="chat-msg-text">' + escapeHtml(m.content) + '</div>' +
+                        '<div class="chat-msg-time">' + timeStr + '</div>';
+        div.appendChild(bubble);
+        chatMessagesEl.appendChild(div);
+    });
+    chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+}
+
+function isMsgDuplicate(content, timestamp) {
+    if (!content || !timestamp) return false;
+    for (var i = 0; i < chatMessages.length; i++) {
+        if (chatMessages[i].content === content && chatMessages[i].isSent) {
+            var sentTime = new Date(chatMessages[i].timestamp).getTime();
+            var recvTime = new Date(timestamp).getTime();
+            if (Math.abs(sentTime - recvTime) < 5000) return true;
+        }
+    }
+    return false;
+}
+
+function sendChatMessage() {
+    var text = chatInput.value.trim();
+    if (!text) return;
+    chatInput.value = '';
+    chatSendBtn.disabled = true;
+
+    var payload = {
+        from: '',
+        fromIp: '',
+        content: text,
+        timestamp: new Date().toISOString()
+    };
+
+    fetch('/api/chat/message', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    }).then(function(resp) {
+        if (resp.ok) {
+            chatMessages.push({ content: text, isSent: true, timestamp: payload.timestamp });
+            renderChatMessages();
+        } else {
+            alert(t('msg_send_failed'));
+        }
+        chatSendBtn.disabled = false;
+    }).catch(function(err) {
+        alert(t('msg_send_error') + err.message);
+        chatSendBtn.disabled = false;
+    });
+}
+
+chatSendBtn.addEventListener('click', sendChatMessage);
+chatInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendChatMessage();
+    }
+});
+
+connectWebSocket();
+checkUnfinishedTasks();
+</script>
+</body>
+</html>

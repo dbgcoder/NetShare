@@ -1,0 +1,137 @@
+set(NETSHARE_CORE_SOURCES
+    common/Logger.cpp
+    common/SettingsManager.cpp
+    common/TlsCertificateGenerator.cpp
+)
+
+set(NETSHARE_CORE_HEADERS
+    common/IShareManager.h
+    common/IFileBrowser.h
+    common/IFolderPacker.h
+    common/NetShareError.h
+    common/DiContainer.h
+    common/Logger.h
+    common/SettingsManager.h
+    common/TlsCertificateGenerator.h
+)
+
+set(NETSHARE_CORE_SHARE_SOURCES
+    share/ShareManager.cpp
+    share/FileBrowser.cpp
+    share/FolderPacker.cpp
+)
+
+set(NETSHARE_CORE_SHARE_HEADERS
+    share/ShareManager.h
+    share/FileBrowser.h
+    share/FolderPacker.h
+)
+
+set(NETSHARE_CORE_TRANSFER_SOURCES
+    transfer/FileTransferEngine.cpp
+    transfer/ChunkManager.cpp
+    transfer/ChunkStateManager.cpp
+    transfer/BandwidthManager.cpp
+    transfer/TransferLogService.cpp
+)
+
+set(NETSHARE_CORE_TRANSFER_HEADERS
+    transfer/FileTransferEngine.h
+    transfer/ChunkManager.h
+    transfer/ChunkState.h
+    transfer/ChunkStateManager.h
+    transfer/BandwidthManager.h
+    transfer/TransferLogService.h
+)
+
+set(NETSHARE_CORE_NOTIFICATION_SOURCES
+    notification/NotificationManager.cpp
+)
+
+set(NETSHARE_CORE_NOTIFICATION_HEADERS
+    notification/NotificationManager.h
+)
+
+set(NETSHARE_CORE_CHAT_SOURCES
+    chat/ChatService.cpp
+)
+
+set(NETSHARE_CORE_CHAT_HEADERS
+    chat/ChatService.h
+)
+
+set(NETSHARE_CORE_AUTH_SOURCES
+    auth/MachineFingerprint.cpp
+    auth/RegistrationKey.cpp
+    auth/AntiDebug.cpp
+    auth/EmailService.cpp
+    auth/AuthService.cpp
+)
+
+set(NETSHARE_CORE_AUTH_HEADERS
+    auth/MachineFingerprint.h
+    auth/RegistrationKey.h
+    auth/AntiDebug.h
+    auth/EmailService.h
+    auth/AuthService.h
+)
+
+add_library(NetshareCore STATIC
+    ${NETSHARE_CORE_SOURCES}
+    ${NETSHARE_CORE_HEADERS}
+    ${NETSHARE_CORE_SHARE_SOURCES}
+    ${NETSHARE_CORE_SHARE_HEADERS}
+    ${NETSHARE_CORE_TRANSFER_SOURCES}
+    ${NETSHARE_CORE_TRANSFER_HEADERS}
+    ${NETSHARE_CORE_NOTIFICATION_SOURCES}
+    ${NETSHARE_CORE_NOTIFICATION_HEADERS}
+    ${NETSHARE_CORE_CHAT_SOURCES}
+    ${NETSHARE_CORE_CHAT_HEADERS}
+    ${NETSHARE_CORE_AUTH_SOURCES}
+    ${NETSHARE_CORE_AUTH_HEADERS}
+)
+
+set_target_properties(NetshareCore PROPERTIES
+    AUTOMOC ON
+    AUTOUIC ON
+    AUTORCC ON
+)
+
+target_include_directories(NetshareCore PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/common
+    ${CMAKE_CURRENT_SOURCE_DIR}/share
+    ${CMAKE_CURRENT_SOURCE_DIR}/transfer
+    ${CMAKE_CURRENT_SOURCE_DIR}/notification
+    ${CMAKE_CURRENT_SOURCE_DIR}/chat
+    ${CMAKE_CURRENT_SOURCE_DIR}/auth
+    ${CMAKE_CURRENT_SOURCE_DIR}/../database
+    ${CMAKE_CURRENT_SOURCE_DIR}/../network
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/civetweb_src/include
+    ${CMAKE_BINARY_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/boost-di
+)
+
+target_link_libraries(NetshareCore PUBLIC
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Network
+    Qt6::Qml
+    Qt6::Sql
+    Qt6::Widgets
+    Qt6::Concurrent
+)
+
+set_target_properties(NetshareCore PROPERTIES
+    OUTPUT_NAME "NetshareCore"
+)
+
+if(WIN32)
+    target_link_libraries(NetshareCore PUBLIC
+        bcrypt
+        ole32
+        oleaut32
+        wbemuuid
+        iphlpapi
+    )
+endif()

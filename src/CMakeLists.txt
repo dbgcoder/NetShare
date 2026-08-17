@@ -1,0 +1,56 @@
+add_subdirectory(core)
+add_subdirectory(database)
+add_subdirectory(network)
+add_subdirectory(qrcode)
+add_subdirectory(gui)
+
+set(APP_SOURCES main.cpp resources.qrc gui/netshare.rc)
+
+qt_add_executable(NetShare ${APP_SOURCES})
+
+qt_add_translations(NetShare
+    TS_FILES
+        gui/translations/netshare_zh_CN.ts
+        gui/translations/netshare_en.ts
+    LUPDATE_OPTIONS -no-obsolete
+    LRELEASE_OPTIONS -compress -removeidentical
+)
+
+target_include_directories(NetShare PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/../third_party/boost-di
+)
+
+target_link_libraries(NetShare PRIVATE
+    NetshareCore
+    NetshareDatabase
+    NetshareNetwork
+    NetshareQrcode
+    NetshareGui
+    NetshareGuiplugin
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Network
+    Qt6::Sql
+    Qt6::Qml
+    Qt6::Quick
+    Qt6::QuickControls2
+    Qt6::Widgets
+)
+
+if(WIN32)
+    set_target_properties(NetShare PROPERTIES
+        WIN32_EXECUTABLE TRUE
+        RC_FILE "${CMAKE_CURRENT_SOURCE_DIR}/gui/netshare.rc"
+    )
+    target_link_libraries(NetShare PRIVATE dwmapi)
+
+    # Release 构建后自动计算 EXE 哈希用于 PE 完整性校验
+    if(CMAKE_BUILD_TYPE STREQUAL "Release")
+        add_custom_command(TARGET NetShare POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E echo "Computing PE hash for integrity verification"
+            COMMAND powershell -Command "Get-FileHash -Path '$<TARGET_FILE:NetShare>' -Algorithm SHA256 | Select-Object -ExpandProperty Hash | Out-File -FilePath '$<TARGET_FILE:NetShare>.pe_hash.txt' -Encoding utf8 -NoNewline"
+            COMMENT "Computing PE hash for integrity verification"
+        )
+    endif()
+endif()

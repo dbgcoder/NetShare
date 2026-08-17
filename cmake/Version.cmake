@@ -1,0 +1,28 @@
+# NetShare Version Configuration
+# 遵循语义化版本规范 (Semantic Versioning)
+
+set(NETSHARE_VERSION_MAJOR 1)
+set(NETSHARE_VERSION_MINOR 0)
+set(NETSHARE_VERSION_PATCH 0)
+set(NETSHARE_VERSION "${NETSHARE_VERSION_MAJOR}.${NETSHARE_VERSION_MINOR}.${NETSHARE_VERSION_PATCH}")
+
+# 预发布版本标识 (可选)
+# set(NETSHARE_VERSION_SUFFIX "alpha")
+
+# 完整的版本字符串
+if(NETSHARE_VERSION_SUFFIX)
+    set(NETSHARE_FULL_VERSION "${NETSHARE_VERSION}-${NETSHARE_VERSION_SUFFIX}")
+else()
+    set(NETSHARE_FULL_VERSION "${NETSHARE_VERSION}")
+endif()
+
+# 编译器标识
+set(NETSHARE_ORGANIZATION_NAME "NetShare")
+set(NETSHARE_ORGANIZATION_DOMAIN "netshare.example.com")
+set(NETSHARE_CONTACT_EMAIL "support@netshare.example.com")
+
+# 版权年份
+set(NETSHARE_COPYRIGHT_YEAR "2026")
+
+message(STATUS "NetShare Version: ${NETSHARE_FULL_VERSION}")
+message(STATUS "Qt Version: ${Qt6_VERSION}")

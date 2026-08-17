@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NetShare</title>
+    <style>
+        :root {
+            --bg-primary: #0f0f23;
+            --bg-card: #16213e;
+            --bg-hover: #1a1a2e;
+            --accent: #e94560;
+            --accent-hover: #ff6b81;
+            --accent-green: #4caf50;
+            --text-primary: #eee;
+            --text-secondary: #888;
+            --text-muted: #555;
+            --border: #2a2a3e;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background: var(--bg-primary); color: var(--text-primary);
+            min-height: 100vh; display: flex; align-items: center; justify-content: center;
+            padding: 20px;
+        }
+        .container { max-width: 640px; width: 100%; }
+        .card {
+            background: var(--bg-card); border-radius: 16px; padding: 40px; text-align: center;
+        }
+        .icon { font-size: 48px; margin-bottom: 16px; }
+        h1 { font-size: 24px; margin: 0 0 8px; }
+        .subtitle { color: var(--text-secondary); margin: 0 0 24px; font-size: 14px; }
+        .btn {
+            display: inline-block; padding: 14px 40px;
+            background: var(--accent); color: #fff; text-decoration: none;
+            border: none; border-radius: 8px; font-size: 16px; font-weight: 600;
+            cursor: pointer; transition: background 0.2s, transform 0.1s;
+        }
+        .btn:hover { background: var(--accent-hover); transform: translateY(-1px); }
+        .btn-green {
+            background: var(--accent-green); margin-top: 20px;
+        }
+        .btn-green:hover { background: #66bb6a; }
+        .btn-secondary {
+            display: block; padding: 14px 40px;
+            background: transparent; color: var(--accent-green); text-decoration: none;
+            border: 1px solid var(--accent-green); border-radius: 8px; font-size: 16px; font-weight: 600;
+            cursor: pointer; transition: all 0.2s; box-sizing: border-box;
+        }
+        .btn-secondary:hover { background: rgba(76, 175, 80, 0.1); }
+        .btn-row {
+            display: flex; gap: 12px; justify-content: center; margin-top: 20px;
+        }
+        .btn-row .btn, .btn-row .btn-secondary { flex: 1; text-align: center; white-space: nowrap; }
+        #downloadBtns { flex: 1; }
+        #downloadBtns .btn { width: 100%; }
+
+        .file-table {
+            width: 100%; border-collapse: collapse; margin-top: 30px;
+            background: var(--bg-primary); border-radius: 8px; overflow: hidden;
+        }
+        .file-table th {
+            padding: 12px 16px; text-align: left; color: var(--text-secondary);
+            font-size: 13px; background: var(--bg-card); border-bottom: 1px solid var(--border);
+        }
+        .file-table td {
+            padding: 10px 16px; border-bottom: 1px solid var(--border); font-size: 14px;
+        }
+        .file-table tr:last-child td { border-bottom: none; }
+        .file-table tr:hover td { background: var(--bg-hover); }
+        .file-table a { color: var(--accent); text-decoration: none; }
+        .file-table a:hover { text-decoration: underline; }
+        .file-size { color: var(--text-secondary); font-size: 13px; }
+
+        .progress-section {
+            display: none; margin-top: 20px; text-align: left;
+        }
+        .progress-section.active { display: block; }
+        .progress-card {
+            background: var(--bg-primary); border-radius: 8px; padding: 16px;
+        }
+        .progress-header {
+            display: flex; justify-content: space-between; margin-bottom: 8px;
+        }
+        .progress-status { color: var(--accent); font-size: 14px; }
+        .progress-speed { color: var(--text-secondary); font-size: 14px; }
+        .progress-bar {
+            background: var(--border); border-radius: 4px; height: 8px; overflow: hidden;
+        }
+        .progress-fill {
+            background: var(--accent); height: 100%; width: 0%; transition: width 0.3s;
+        }
+        .progress-info {
+            display: flex; justify-content: space-between; margin-top: 8px;
+            font-size: 12px; color: var(--text-secondary);
+        }
+        .btn-cancel {
+            margin-top: 12px; padding: 8px 20px; background: #555; color: #fff;
+            border: none; border-radius: 6px; font-size: 13px; cursor: pointer;
+            display: none;
+        }
+        .btn-cancel.active { display: inline-block; }
+
+        .footer { color: var(--text-muted); font-size: 12px; margin-top: 30px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <div class="icon" id="shareIcon">📂</div>
+            <h1 id="shareName" data-i18n="loading">加载中...</h1>
+            <p class="subtitle" id="shareSubtitle" data-i18n="fetching_info">正在获取分享信息</p>
+
+            <div class="btn-row" id="actionBtns">
+                <div id="downloadBtns"></div>
+                <a class="btn btn-secondary" id="uploadLink" href="#" data-i18n="upload_file">上传文件</a>
+            </div>
+
+            <div class="progress-section" id="progressSection">
+                <div class="progress-card">
+                    <div class="progress-header">
+                        <span class="progress-status" id="dlStatus" data-i18n="preparing">准备中...</span>
+                        <span class="progress-speed" id="dlSpeed"></span>
+                    </div>
+                    <div class="progress-bar"><div class="progress-fill" id="dlBar"></div></div>
+                    <div class="progress-info">
+                        <span id="dlSize"></span>
+                        <span id="dlPercent">0%</span>
+                    </div>
+                    <button class="btn-cancel" id="dlCancelBtn" data-i18n="cancel">取消</button>
+                </div>
+            </div>
+
+            <div id="fileListSection" style="display:none">
+                <div id="breadcrumb" style="display:none;color:#aaa;font-size:13px;margin-bottom:12px;text-align:left"></div>
+                <h3 style="color:#ccc;font-size:16px;margin-bottom:12px;text-align:left" data-i18n="file_list">文件列表</h3>
+                <table class="file-table">
+                    <thead><tr>
+                        <th data-i18n="name">名称</th>
+                        <th data-i18n="size">大小</th>
+                        <th data-i18n="action">操作</th>
+                    </tr></thead>
+                    <tbody id="fileListBody"></tbody>
+                </table>
+            </div>
+
+            <p class="footer" data-i18n="powered_by">由 NetShare 提供</p>
+        </div>
+    </div>
+
+<script src="/common.js"></script>
+<script>
+var TOKEN = '{{TOKEN}}';
+var LANG = '{{LANG}}';
+var IS_FOLDER = {{IS_FOLDER}};
+var FOLDER_NAME = '{{FOLDER_NAME}}';
+
+// Initialize page after i18n is ready
+applyI18n(initSharePage);
+
+function initSharePage() {
+// Set page title and share info
+var shareIcon = document.getElementById('shareIcon');
+var shareName = document.getElementById('shareName');
+var shareSubtitle = document.getElementById('shareSubtitle');
+var uploadLink = document.getElementById('uploadLink');
+
+
+if (IS_FOLDER) {
+    shareIcon.textContent = '📂';
+    shareName.textContent = FOLDER_NAME;
+    shareSubtitle.textContent = t('folder_share');
+    document.title = 'NetShare - ' + FOLDER_NAME;
+} else {
+    shareIcon.textContent = '📄';
+    shareName.textContent = FOLDER_NAME;
+    shareSubtitle.textContent = t('file_share');
+    document.title = 'NetShare - ' + FOLDER_NAME;
+}
+
+// Download buttons
+var downloadBtns = document.getElementById('downloadBtns');
+if (IS_FOLDER) {
+    downloadBtns.innerHTML = '<a class="btn" href="/folder/' + TOKEN + '">' + t('download_zip') + '</a>';
+} else {
+    downloadBtns.innerHTML = '<button class="btn" onclick="startDownload(\'/download/' + TOKEN + '/\')">' + t('download_file') + '</button>';
+}
+
+// Upload link
+uploadLink.href = '/receive';
+
+// File list for folders
+if (IS_FOLDER) {
+    var params = new URLSearchParams(window.location.search);
+    var subParam = params.get('sub') || '';
+    loadFileList(subParam);
+}
+} // end of initSharePage
+
+// Current sub-path for breadcrumb
+var currentSubPath = '';
+
+function loadFileList(subPath) {
+    currentSubPath = subPath;
+    var apiUrl = '/api/files/' + TOKEN;
+    if (subPath) apiUrl += '/' + encodeURIComponent(subPath);
+
+    fetch(apiUrl).then(function(r) { return r.json(); }).then(function(entries) {
+        if (!entries || entries.length === 0) return;
+        document.getElementById('fileListSection').style.display = 'block';
+
+        // Breadcrumb
+        var breadcrumb = document.getElementById('breadcrumb');
+        if (subPath) {
+            var parts = subPath.split('/');
+            var crumbHtml = '<a href="javascript:loadFileList(\'\')" style="color:#e94560">' + FOLDER_NAME + '</a>';
+            var pathSoFar = '';
+            for (var p = 0; p < parts.length; p++) {
+                pathSoFar += (pathSoFar ? '/' : '') + parts[p];
+                crumbHtml += ' / ';
+                if (p < parts.length - 1) {
+                    crumbHtml += '<a href="javascript:loadFileList(\'' + encodeURIComponent(pathSoFar) + '\')" style="color:#e94560">' + escapeHtml(parts[p]) + '</a>';
+                } else {
+                    crumbHtml += escapeHtml(parts[p]);
+                }
+            }
+            breadcrumb.innerHTML = crumbHtml;
+            breadcrumb.style.display = 'block';
+            shareName.textContent = parts[parts.length - 1];
+        } else {
+            breadcrumb.style.display = 'none';
+            shareName.textContent = FOLDER_NAME;
+        }
+
+        var tbody = document.getElementById('fileListBody');
+        tbody.innerHTML = '';
+        for (var i = 0; i < entries.length; i++) {
+            var e = entries[i];
+            var icon = e.isFolder ? '📁' : '📄';
+            var sizeStr = e.isFolder ? '' : e.displaySize;
+            var link;
+            if (e.isFolder) {
+                link = 'javascript:loadFileList(\'' + encodeURIComponent(e.name) + '\')';
+            } else {
+                link = '/download/' + TOKEN + '/' + encodeURIComponent(e.name);
+            }
+            var actionText = e.isFolder ? t('name') : t('download');
+            var tr = document.createElement('tr');
+            tr.innerHTML = '<td>' + icon + ' ' + escapeHtml(e.name) + '</td>' +
+                '<td class="file-size">' + sizeStr + '</td>' +
+                '<td><a href="' + link + '">' + (e.isFolder ? t('name') : t('download')) + '</a></td>';
+            tbody.appendChild(tr);
+        }
+    }).catch(function() {});
+}
+
+// ===== Download with resume support =====
+var dlChunks = [];
+var dlFileSize = 0;
+var dlUrl = '';
+var dlCancelled = false;
+var dlController = null;
+
+function updateProgress(downloaded, total) {
+    var pct = total > 0 ? Math.round(downloaded / total * 100) : 0;
+    document.getElementById('dlBar').style.width = pct + '%';
+    document.getElementById('dlPercent').textContent = pct + '%';
+    document.getElementById('dlSize').textContent = formatSize(downloaded) + ' / ' + formatSize(total);
+}
+
+function updateSpeed(bytesPerSec) {
+    document.getElementById('dlSpeed').textContent = bytesPerSec > 0 ? formatSize(bytesPerSec) + '/s' : '';
+}
+
+async function startDownload(url) {
+    dlUrl = url;
+    dlCancelled = false;
+    document.getElementById('progressSection').classList.add('active');
+    document.getElementById('dlCancelBtn').classList.add('active');
+    document.getElementById('dlStatus').textContent = t('fetching_info');
+
+    try {
+        var headResp = await fetch(url, { method: 'HEAD' });
+        if (!headResp.ok) {
+            document.getElementById('dlStatus').textContent = t('fetch_failed');
+            return;
+        }
+        dlFileSize = parseInt(headResp.headers.get('Content-Length')) || 0;
+        var acceptRanges = headResp.headers.get('Accept-Ranges');
+        if (acceptRanges !== 'bytes') {
+            document.getElementById('dlStatus').textContent = t('no_resume');
+            window.location.href = url;
+            return;
+        }
+        if (dlFileSize > 524288000) {
+            document.getElementById('dlStatus').textContent = t('large_file') + '(' + formatSize(dlFileSize) + '), ' + t('suggest_manager');
+        } else {
+            document.getElementById('dlStatus').textContent = t('file_size') + formatSize(dlFileSize);
+        }
+        await resumeDownload();
+    } catch (e) {
+        document.getElementById('dlStatus').textContent = t('error') + e.message;
+    }
+}
+
+async function resumeDownload() {
+    var downloaded = 0;
+    for (var i = 0; i < dlChunks.length; i++) {
+        var buf = await dlChunks[i].arrayBuffer();
+        downloaded += buf.byteLength;
+    }
+    if (downloaded >= dlFileSize && dlFileSize > 0) { saveFile(); return; }
+
+    dlController = new AbortController();
+    var headers = {};
+    if (downloaded > 0) headers['Range'] = 'bytes=' + downloaded + '-';
+
+    document.getElementById('dlStatus').textContent = downloaded > 0
+        ? t('resuming') + formatSize(downloaded) + t('downloaded')
+        : t('downloading');
+    updateProgress(downloaded, dlFileSize);
+
+    var lastTime = Date.now();
+    var lastDownloaded = downloaded;
+
+    try {
+        var resp = await fetch(dlUrl, { headers: headers, signal: dlController.signal });
+        if (!resp.ok && resp.status !== 206) {
+            document.getElementById('dlStatus').textContent = t('dl_failed') + resp.status;
+            return;
+        }
+        var reader = resp.body.getReader();
+        while (true) {
+            if (dlCancelled) break;
+            var result = await reader.read();
+            if (result.done) break;
+            dlChunks.push(result.value);
+            downloaded = 0;
+            for (var i = 0; i < dlChunks.length; i++) downloaded += dlChunks[i].byteLength;
+            var now = Date.now();
+            var dt = now - lastTime;
+            if (dt >= 500) {
+                var speed = (downloaded - lastDownloaded) * 1000 / dt;
+                updateSpeed(speed);
+                lastTime = now;
+                lastDownloaded = downloaded;
+            }
+            updateProgress(downloaded, dlFileSize);
+        }
+        if (!dlCancelled) {
+            if (dlFileSize > 0 && downloaded >= dlFileSize) { saveFile(); }
+            else if (dlFileSize <= 0 && result.done) { dlFileSize = downloaded; saveFile(); }
+            else { document.getElementById('dlStatus').textContent = t('interrupted'); }
+        } else {
+            document.getElementById('dlStatus').textContent = t('cancelled_resume');
+        }
+    } catch (e) {
+        if (e.name === 'AbortError') {
+            document.getElementById('dlStatus').textContent = t('cancelled_resume');
+        } else {
+            document.getElementById('dlStatus').textContent = t('interrupted_msg') + e.message;
+        }
+    }
+}
+
+function saveFile() {
+    document.getElementById('dlStatus').textContent = t('saving');
+    var blob = new Blob(dlChunks);
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    var name = dlUrl.split('/').filter(function(s) { return s.length > 0; }).pop() || 'download';
+    a.download = decodeURIComponent(name);
+    a.click();
+    setTimeout(function() { URL.revokeObjectURL(url); }, 10000);
+    document.getElementById('dlStatus').textContent = t('complete');
+    updateProgress(dlFileSize, dlFileSize);
+    dlChunks = [];
+}
+
+function cancelDownload() {
+    dlCancelled = true;
+    if (dlController) dlController.abort();
+}
+
+document.getElementById('dlCancelBtn').onclick = cancelDownload;
+</script>
+</body>
+</html>
